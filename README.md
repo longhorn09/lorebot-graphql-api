@@ -4,11 +4,10 @@ Backend microservice in NodeJS using GraphQL and CloudSQL database
 
 ## Dependencies
 
-Dependencies can be installed with `npm install` but to install discretely run following
+Dependencies will be automatically installed with `npm install` but to install discretely run following
 ```
-npm install @apollo/server @google-cloud/cloud-sql-connector dotenv graphql graphql-tag mysql2
+npm install @apollo/server @google-cloud/cloud-sql-connector dotenv graphql graphql-tag mysql2 express
 ```
-`npm install express and express-graphql` aren't really necessary
 
 ## .env
 `.env` file for use with `dotenv` should be structured in below fashion.
@@ -18,7 +17,7 @@ There's an existing example.env as a boilerplate, in Linux command line perform 
 cp env.template .env
 ```
 
-`dotenv` is a design decision favored over `config.json` and will automatically install with `npm install` but to install discretely use following
+`dotenv` is a design decision favored over `config.json` 
 
 ## CloudSQL API enablement
 Run following in Cloud Shell to enable requisite APIs
