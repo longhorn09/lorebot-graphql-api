@@ -8,7 +8,12 @@ const decodeCursor = (cursor) => parseInt(Buffer.from(cursor, 'base64').toString
 
 // Helper function to build WHERE clause from filters
 const buildWhereClause = (filters) => {
-  if (!filters) return '';
+  if (!filters) {
+    return {
+      whereClause: '',
+      params: []
+    };
+  }
   
   const conditions = [];
   const params = [];
@@ -46,17 +51,36 @@ export const personResolvers = {
         const totalCount = countResult[0].total;
         
         // Build query with cursor pagination
-        let queryStr = `SELECT * FROM Person ${whereClause}`;
+        let queryStr = `SELECT * FROM Person`;
         let queryParams = [...params];
         
+        // Build WHERE conditions
+        const conditions = [];
+        
+        // Add filter conditions
+        if (whereClause) {
+          // Remove "WHERE " prefix and add conditions
+          const filterConditions = whereClause.replace('WHERE ', '');
+          if (filterConditions) {
+            conditions.push(filterConditions);
+          }
+        }
+        
+        // Add cursor condition
         if (after) {
           const afterId = decodeCursor(after);
-          queryStr += ` AND PERSON_ID > ?`;
+          conditions.push('PERSON_ID > ?');
           queryParams.push(afterId);
         }
         
-        queryStr += ` ORDER BY PERSON_ID ASC LIMIT ?`;
-        queryParams.push(first + 1); // Get one extra to check if there's a next page
+        // Combine all conditions
+        if (conditions.length > 0) {
+          queryStr += ` WHERE ${conditions.join(' AND ')}`;
+        }
+        
+        // Use string interpolation for LIMIT since we control the value
+        const limit = first + 1; // Get one extra to check if there's a next page
+        queryStr += ` ORDER BY PERSON_ID ASC LIMIT ${limit}`;
         
         const results = await query(queryStr, queryParams);
         const hasNextPage = results.length > first;
@@ -76,41 +100,6 @@ export const personResolvers = {
             endCursor: edges.length > 0 ? edges[edges.length - 1].cursor : null
           },
           totalCount
-        };
-      } catch (error) {
-        console.error('Error fetching paginated persons:', error);
-        throw new Error('Failed to fetch person data');
-      }
-    },
-
-    // Offset-based pagination (simpler)
-    allPersonsPaginated: async (_parent, { page = 1, limit = 10, filter }, _context, _info) => {
-      try {
-        const { whereClause, params } = buildWhereClause(filter);
-        
-        // Get total count
-        const countResult = await query(`SELECT COUNT(*) as total FROM Person ${whereClause}`, params);
-        const totalCount = countResult[0].total;
-        
-        // Calculate pagination
-        const offset = (page - 1) * limit;
-        const totalPages = Math.ceil(totalCount / limit);
-        
-        // Get items
-        const queryStr = `SELECT * FROM Person ${whereClause} ORDER BY PERSON_ID ASC LIMIT ? OFFSET ?`;
-        const queryParams = [...params, limit, offset];
-        
-        const items = await query(queryStr, queryParams);
-        
-        return {
-          items,
-          pagination: {
-            totalCount,
-            currentPage: page,
-            totalPages,
-            hasNextPage: page < totalPages,
-            hasPreviousPage: page > 1
-          }
         };
       } catch (error) {
         console.error('Error fetching paginated persons:', error);

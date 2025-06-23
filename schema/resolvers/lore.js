@@ -8,7 +8,12 @@ const decodeCursor = (cursor) => parseInt(Buffer.from(cursor, 'base64').toString
 
 // Helper function to build WHERE clause from filters
 const buildWhereClause = (filters) => {
-  if (!filters) return '';
+  if (!filters) {
+    return {
+      whereClause: '',
+      params: []
+    };
+  }
   
   const conditions = [];
   const params = [];
@@ -51,17 +56,36 @@ export const loreResolvers = {
         const totalCount = countResult[0].total;
         
         // Build query with cursor pagination
-        let queryStr = `SELECT * FROM Lore ${whereClause}`;
+        let queryStr = `SELECT * FROM Lore`;
         let queryParams = [...params];
         
+        // Build WHERE conditions
+        const conditions = [];
+        
+        // Add filter conditions
+        if (whereClause) {
+          // Remove "WHERE " prefix and add conditions
+          const filterConditions = whereClause.replace('WHERE ', '');
+          if (filterConditions) {
+            conditions.push(filterConditions);
+          }
+        }
+        
+        // Add cursor condition
         if (after) {
           const afterId = decodeCursor(after);
-          queryStr += ` AND LORE_ID > ?`;
+          conditions.push('LORE_ID > ?');
           queryParams.push(afterId);
         }
         
-        queryStr += ` ORDER BY LORE_ID ASC LIMIT ?`;
-        queryParams.push(first + 1); // Get one extra to check if there's a next page
+        // Combine all conditions
+        if (conditions.length > 0) {
+          queryStr += ` WHERE ${conditions.join(' AND ')}`;
+        }
+        
+        // Use string interpolation for LIMIT since we control the value
+        const limit = first + 1; // Get one extra to check if there's a next page
+        queryStr += ` ORDER BY LORE_ID ASC LIMIT ${limit}`;
         
         const results = await query(queryStr, queryParams);
         const hasNextPage = results.length > first;
