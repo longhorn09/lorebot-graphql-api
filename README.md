@@ -55,10 +55,58 @@ gcloud projects add-iam-policy-binding ${GOOGLE_CLOUD_PROJECT} \
   --role="roles/logging.logWriter"
   ```
 
-
-
 ### Database service account user setup
 ```
 gcloud sql users create quickstart-service-account@${GOOGLE_CLOUD_PROJECT}.iam.gserviceaccount.com --instance=database_instance_here --type=cloud_iam_service_account
 ```
   
+## GraphQL example queries
+
+### First page
+```
+query {
+  allLoreConnection(
+    first: 5
+  ) {
+    edges {
+      node {
+        LORE_ID
+        OBJECT_NAME
+      }
+      cursor
+    }
+    pageInfo {
+      hasNextPage
+      hasPreviousPage
+      startCursor
+      endCursor
+    }
+    totalCount
+  }
+}
+```
+
+### Second page
+```
+query {
+  allLoreConnection(
+    first: 5
+    after: "NQ=="
+  ) {
+    edges {
+      node {
+        LORE_ID
+        OBJECT_NAME
+      }
+      cursor
+    }
+    pageInfo {
+      hasNextPage
+      hasPreviousPage
+      startCursor
+      endCursor
+    }
+    totalCount
+  }
+}
+```
