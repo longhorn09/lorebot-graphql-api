@@ -1,7 +1,124 @@
 import { query } from '../../services/db.mjs';
 
+// Helper function to create cursor from ID
+const createCursor = (id) => Buffer.from(id.toString()).toString('base64');
+
+// Helper function to decode cursor to ID
+const decodeCursor = (cursor) => parseInt(Buffer.from(cursor, 'base64').toString());
+
+// Helper function to build WHERE clause from filters
+const buildWhereClause = (filters) => {
+  if (!filters) return '';
+  
+  const conditions = [];
+  const params = [];
+  
+  if (filters.CHARNAME) {
+    conditions.push('CHARNAME LIKE ?');
+    params.push(`%${filters.CHARNAME}%`);
+  }
+  
+  if (filters.SUBMITTER) {
+    conditions.push('SUBMITTER LIKE ?');
+    params.push(`%${filters.SUBMITTER}%`);
+  }
+  
+  if (filters.CLAN_ID) {
+    conditions.push('CLAN_ID = ?');
+    params.push(filters.CLAN_ID);
+  }
+  
+  return {
+    whereClause: conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '',
+    params
+  };
+};
+
 export const personResolvers = {
   Query: {
+    // Cursor-based pagination (GraphQL standard)
+    allPersonsConnection: async (_parent, { first = 10, after, filter }, _context, _info) => {
+      try {
+        const { whereClause, params } = buildWhereClause(filter);
+        
+        // Get total count
+        const countResult = await query(`SELECT COUNT(*) as total FROM Person ${whereClause}`, params);
+        const totalCount = countResult[0].total;
+        
+        // Build query with cursor pagination
+        let queryStr = `SELECT * FROM Person ${whereClause}`;
+        let queryParams = [...params];
+        
+        if (after) {
+          const afterId = decodeCursor(after);
+          queryStr += ` AND PERSON_ID > ?`;
+          queryParams.push(afterId);
+        }
+        
+        queryStr += ` ORDER BY PERSON_ID ASC LIMIT ?`;
+        queryParams.push(first + 1); // Get one extra to check if there's a next page
+        
+        const results = await query(queryStr, queryParams);
+        const hasNextPage = results.length > first;
+        const items = hasNextPage ? results.slice(0, first) : results;
+        
+        const edges = items.map(item => ({
+          node: item,
+          cursor: createCursor(item.PERSON_ID)
+        }));
+        
+        return {
+          edges,
+          pageInfo: {
+            hasNextPage,
+            hasPreviousPage: !!after,
+            startCursor: edges.length > 0 ? edges[0].cursor : null,
+            endCursor: edges.length > 0 ? edges[edges.length - 1].cursor : null
+          },
+          totalCount
+        };
+      } catch (error) {
+        console.error('Error fetching paginated persons:', error);
+        throw new Error('Failed to fetch person data');
+      }
+    },
+
+    // Offset-based pagination (simpler)
+    allPersonsPaginated: async (_parent, { page = 1, limit = 10, filter }, _context, _info) => {
+      try {
+        const { whereClause, params } = buildWhereClause(filter);
+        
+        // Get total count
+        const countResult = await query(`SELECT COUNT(*) as total FROM Person ${whereClause}`, params);
+        const totalCount = countResult[0].total;
+        
+        // Calculate pagination
+        const offset = (page - 1) * limit;
+        const totalPages = Math.ceil(totalCount / limit);
+        
+        // Get items
+        const queryStr = `SELECT * FROM Person ${whereClause} ORDER BY PERSON_ID ASC LIMIT ? OFFSET ?`;
+        const queryParams = [...params, limit, offset];
+        
+        const items = await query(queryStr, queryParams);
+        
+        return {
+          items,
+          pagination: {
+            totalCount,
+            currentPage: page,
+            totalPages,
+            hasNextPage: page < totalPages,
+            hasPreviousPage: page > 1
+          }
+        };
+      } catch (error) {
+        console.error('Error fetching paginated persons:', error);
+        throw new Error('Failed to fetch person data');
+      }
+    },
+
+    // Legacy query (keep for backward compatibility)
     allPersons: async (_parent, _args, context, _info) => {
       try {
         const results = await query('SELECT * FROM Person', []);

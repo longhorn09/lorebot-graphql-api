@@ -31,6 +31,17 @@ export const personTypeDefs = gql`
     CLAN_ID: Int
   }
 
+  type PersonEdge {
+    node: Person!
+    cursor: String!
+  }
+
+  type PersonConnection {
+    edges: [PersonEdge!]!
+    pageInfo: PageInfo!
+    totalCount: Int!
+  }
+
   input PersonInput {
     CHARNAME: String!
     LIGHT: String
@@ -60,7 +71,21 @@ export const personTypeDefs = gql`
     CLAN_ID: Int
   }
 
+  input PersonFilterInput {
+    CHARNAME: String
+    SUBMITTER: String
+    CLAN_ID: Int
+  }
+
   extend type Query {
+    # Cursor-based pagination (GraphQL standard)
+    allPersonsConnection(
+      first: Int = 10
+      after: String
+      filter: PersonFilterInput
+    ): PersonConnection!
+    
+    # Legacy query (keep for backward compatibility)
     allPersons: [Person]
     person(PERSON_ID: Int!): Person
   }

@@ -29,6 +29,17 @@ export const loreTypeDefs = gql`
     DAMAGE: String
   }
 
+  type LoreEdge {
+    node: Lore!
+    cursor: String!
+  }
+
+  type LoreConnection {
+    edges: [LoreEdge!]!
+    pageInfo: PageInfo!
+    totalCount: Int!
+  }
+
   input LoreInput {
     OBJECT_NAME: String
     ITEM_TYPE: String
@@ -56,7 +67,22 @@ export const loreTypeDefs = gql`
     DAMAGE: String
   }
 
+  input LoreFilterInput {
+    OBJECT_NAME: String
+    ITEM_TYPE: String
+    CLASS: String
+    SUBMITTER: String
+  }
+
   extend type Query {
+    # Cursor-based pagination (GraphQL standard)
+    allLoreConnection(
+      first: Int = 10
+      after: String
+      filter: LoreFilterInput
+    ): LoreConnection!
+    
+    # Legacy query (keep for backward compatibility)
     allLore: [Lore]
     lore(LORE_ID: Int!): Lore
   }
