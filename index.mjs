@@ -5,6 +5,9 @@
 import dotenv from 'dotenv';
 import { ApolloServer } from '@apollo/server';
 import { startStandaloneServer } from '@apollo/server/standalone';
+import { expressMiddleware } from '@apollo/server/express4';
+import express from 'express';
+import cors from 'cors';
 import typeDefs from './schema.mjs'; // Import typeDefs from the new schema.js file
 import { query, connectDB } from './services/db.mjs';
 dotenv.config();
@@ -50,6 +53,26 @@ async function startServer() {
     const dbConnection = await connectDB();
     console.log('Successfully connected to Cloud SQL (MySQL)!');
 
+    // Create Express app
+    const app = express();
+    
+    // Add CORS middleware
+    app.use(cors());
+    
+    // Add JSON body parser
+    app.use(express.json());
+
+    // Health check endpoint
+    app.get('/health', (req, res) => {
+      console.log('🏥 Health check request received');
+      res.status(200).json({
+        status: 'healthy',
+        timestamp: new Date().toISOString(),
+        service: 'lorebot-graphql-api',
+        database: 'connected'
+      });
+    });
+
     // Create a new ApolloServer instance
     // typeDefs: Your GraphQL schema definitions
     // resolvers: Functions that resolve data for your schema fields
@@ -66,18 +89,61 @@ async function startServer() {
       formatError: (error) => {
         // Log the error for debugging purposes (optional)
         console.error('GraphQL Error:', error);
+        
+        // Add more detailed logging for debugging empty query requests
+        if (error.extensions?.code === 'BAD_REQUEST' && 
+            error.message.includes('non-empty `query`')) {
+          console.log('⚠️  Empty query request detected - this might be a health check or monitoring tool');
+          console.log('   Request details:', {
+            path: error.extensions?.path,
+            timestamp: new Date().toISOString(),
+            userAgent: error.extensions?.userAgent || 'Unknown',
+            ip: error.extensions?.ip || 'Unknown'
+          });
+          
+          // Don't log this as an error since it's likely expected behavior
+          return {
+            message: 'GraphQL query is required',
+            extensions: {
+              code: 'BAD_REQUEST'
+            }
+          };
+        }
+        
         // Return the error to the client (you might want to hide sensitive details in production)
         return error;
       },
     });
 
     // Start the server
-    //const { url } = await server.listen({ port: process.env.PORT || 4000 });
-    //console.log(`🚀 Server ready at ${url}`);
-    const { url } = await startStandaloneServer(server, {
-      listen: { port: 4000 },
+    await server.start();
+    
+    // Apply Apollo middleware to Express app
+    app.use('/graphql', expressMiddleware(server, {
+      context: async ({ req }) => {
+        // Log incoming requests for debugging
+        const userAgent = req.headers['user-agent'] || 'Unknown';
+        const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'Unknown';
+        
+        console.log(`📥 ${req.method} ${req.url} - ${new Date().toISOString()}`);
+        console.log(`   User-Agent: ${userAgent}`);
+        console.log(`   IP: ${ip}`);
+        
+        return { 
+          db: dbConnection,
+          userAgent,
+          ip
+        };
+      },
+    }));
+
+    // Start Express server
+    const port = process.env.PORT || 4000;
+    app.listen(port, () => {
+      console.log(`🚀  Server ready at: http://localhost:${port}/`);
+      console.log(`🏥  Health check available at: http://localhost:${port}/health`);
+      console.log(`📊  Apollo Studio available at: http://localhost:${port}/graphql`);
     });
-    console.log(`🚀  Server ready at: ${url}`);
   } catch (error) {
     console.error('❌ Error starting server:', error);
     process.exit(1); // Exit with an error code
