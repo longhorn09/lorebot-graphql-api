@@ -1,0 +1,29 @@
+{
+  "name": "lorebot-graphql-api",
+  "version": "1.0.0",
+  "description": "Backend microservice in NodeJS using GraphQL and CloudSQL database",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+    ,"start": "node index.js"
+  },
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/longhorn09/lorebot-graphql-api.git"
+  },
+  "author": "Norman Tang",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/longhorn09/lorebot-graphql-api/issues"
+  },
+  "homepage": "https://github.com/longhorn09/lorebot-graphql-api#readme",
+  "dependencies": {
+    "@apollo/server": "^4.12.2",
+    "@google-cloud/cloud-sql-connector": "^1.8.1",
+    "dotenv": "^16.5.0",
+    "graphql": "^16.11.0",
+    "graphql-tag": "^2.12.6",
+    "mysql2": "^3.14.1"
+  }
+}
