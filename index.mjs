@@ -85,10 +85,33 @@ async function startServer() {
         // Log incoming requests for debugging
         const userAgent = req.headers['user-agent'] || 'Unknown';
         const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'Unknown';
+        const contentType = req.headers['content-type'] || 'Unknown';
+        const contentLength = req.headers['content-length'] || 'Unknown';
         
-        console.log(`📥 ${req.method} ${req.url} - ${new Date().toISOString()}`);
-        console.log(`   User-Agent: ${userAgent}`);
-        console.log(`   IP: ${ip}`);
+        // Check if detailed logging is enabled
+        const enableDetailedLogging = process.env.ENABLE_DETAILED_LOGGING === 'true';
+        
+        // Filter out common polling requests
+        const isPollingRequest = 
+          req.method === 'POST' && 
+          (!req.body || !req.body.query || req.body.query.trim() === '') &&
+          userAgent.includes('Mozilla') && 
+          ip === '::1';
+        
+        if (enableDetailedLogging && !isPollingRequest) {
+          console.log(`📥 ${req.method} ${req.url} - ${new Date().toISOString()}`);
+          console.log(`   User-Agent: ${userAgent}`);
+          console.log(`   IP: ${ip}`);
+          console.log(`   Content-Type: ${contentType}`);
+          console.log(`   Content-Length: ${contentLength}`);
+          
+          // Log request body for debugging (be careful with sensitive data)
+          if (req.body && Object.keys(req.body).length > 0) {
+            console.log(`   Request Body: ${JSON.stringify(req.body).substring(0, 200)}...`);
+          }
+        } else if (isPollingRequest && enableDetailedLogging) {
+          console.log(`🔄 Polling request detected (filtered) - ${new Date().toISOString()}`);
+        }
         
         return { 
           db: dbConnection,
