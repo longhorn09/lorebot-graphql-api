@@ -75,15 +75,15 @@ export const loreTypeDefs = gql`
   }
 
   extend type Query {
-    # Cursor-based pagination (GraphQL standard)
-    allLoreConnection(
+    # Paginated search with tokenization
+    allLorePaginated(
       first: Int = 10
       after: String
-      filter: LoreFilterInput
+      searchToken: String
     ): LoreConnection!
     
     # Legacy query (keep for backward compatibility)
-    allLore: [Lore]
+    allLore(searchToken: String): [Lore]
     lore(LORE_ID: Int!): Lore
   }
 
