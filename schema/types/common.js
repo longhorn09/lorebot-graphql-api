@@ -7,4 +7,9 @@ export const paginationTypeDefs = gql`
     startCursor: String
     endCursor: String
   }
+
+  enum OrderDirection {
+    ASC
+    DESC
+  }
 `; 

@@ -1,10 +1,24 @@
 import { query } from '../../services/db.mjs';
 
 // Helper function to create cursor from ID
-const createCursor = (id) => Buffer.from(id.toString()).toString('base64');
+const createCursor = (value) => {
+  // Handle different data types
+  if (value === null || value === undefined) {
+    return Buffer.from('null').toString('base64');
+  }
+  return Buffer.from(value.toString()).toString('base64');
+};
 
 // Helper function to decode cursor to ID
-const decodeCursor = (cursor) => parseInt(Buffer.from(cursor, 'base64').toString());
+const decodeCursor = (cursor) => {
+  const decoded = Buffer.from(cursor, 'base64').toString();
+  if (decoded === 'null') {
+    return null;
+  }
+  // Try to parse as integer first, fallback to string
+  const parsed = parseInt(decoded);
+  return isNaN(parsed) ? decoded : parsed;
+};
 
 // Helper function to build WHERE clause from filters
 const buildWhereClause = (filters) => {
@@ -39,11 +53,23 @@ const buildWhereClause = (filters) => {
   };
 };
 
+// Helper function to validate orderBy field
+const validateOrderBy = (orderBy) => {
+  const validFields = ['PERSON_ID', 'CHARNAME', 'SUBMITTER', 'CREATE_DATE', 'CLAN_ID'];
+  if (!validFields.includes(orderBy)) {
+    throw new Error(`Invalid orderBy field: ${orderBy}`);
+  }
+  return orderBy;
+};
+
 export const personResolvers = {
   Query: {
     // Cursor-based pagination (GraphQL standard)
-    allPersonsConnection: async (_parent, { first = 10, after, filter }, _context, _info) => {
+    allPersonsConnection: async (_parent, { first = 10, after, filter, orderBy = 'PERSON_ID', orderDirection = 'ASC' }, _context, _info) => {
       try {
+        // Validate orderBy field
+        const validatedOrderBy = validateOrderBy(orderBy);
+        
         const { whereClause, params } = buildWhereClause(filter);
         
         // Get total count
@@ -68,9 +94,10 @@ export const personResolvers = {
         
         // Add cursor condition
         if (after) {
-          const afterId = decodeCursor(after);
-          conditions.push('PERSON_ID > ?');
-          queryParams.push(afterId);
+          const afterValue = decodeCursor(after);
+          const operator = orderDirection === 'ASC' ? '>' : '<';
+          conditions.push(`${validatedOrderBy} ${operator} ?`);
+          queryParams.push(afterValue);
         }
         
         // Combine all conditions
@@ -78,9 +105,12 @@ export const personResolvers = {
           queryStr += ` WHERE ${conditions.join(' AND ')}`;
         }
         
+        // Add ordering
+        queryStr += ` ORDER BY ${validatedOrderBy} ${orderDirection}`;
+        
         // Use string interpolation for LIMIT since we control the value
         const limit = first + 1; // Get one extra to check if there's a next page
-        queryStr += ` ORDER BY PERSON_ID ASC LIMIT ${limit}`;
+        queryStr += ` LIMIT ${limit}`;
         
         const results = await query(queryStr, queryParams);
         const hasNextPage = results.length > first;
@@ -88,7 +118,7 @@ export const personResolvers = {
         
         const edges = items.map(item => ({
           node: item,
-          cursor: createCursor(item.PERSON_ID)
+          cursor: createCursor(item[validatedOrderBy])
         }));
         
         return {
@@ -114,17 +144,6 @@ export const personResolvers = {
         return results;
       } catch (error) {
         console.error('Error fetching all persons:', error);
-        throw new Error('Failed to fetch person data');
-      }
-    },
-
-    person: async (_parent, args, _context, _info) => {
-      try {
-        const { PERSON_ID } = args;
-        const results = await query('SELECT * FROM Person WHERE PERSON_ID = ?', [PERSON_ID]);
-        return results.length > 0 ? results[0] : null;
-      } catch (error) {
-        console.error('Error fetching person by ID:', error);
         throw new Error('Failed to fetch person data');
       }
     },

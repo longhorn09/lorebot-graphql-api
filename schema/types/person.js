@@ -77,17 +77,26 @@ export const personTypeDefs = gql`
     CLAN_ID: Int
   }
 
+  enum PersonOrderBy {
+    PERSON_ID
+    CHARNAME
+    SUBMITTER
+    CREATE_DATE
+    CLAN_ID
+  }
+
   extend type Query {
     # Cursor-based pagination (GraphQL standard)
     allPersonsConnection(
       first: Int = 10
       after: String
       filter: PersonFilterInput
+      orderBy: PersonOrderBy = CREATE_DATE
+      orderDirection: OrderDirection = DESC
     ): PersonConnection!
     
     # Legacy query (keep for backward compatibility)
     allPersons: [Person]
-    person(PERSON_ID: Int!): Person
   }
 
   extend type Mutation {

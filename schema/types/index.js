@@ -16,4 +16,3 @@ const baseTypeDefs = gql`
 
 // Combine all type definitions
 export const typeDefs = [baseTypeDefs, paginationTypeDefs, loreTypeDefs, personTypeDefs]; 
-//export const typeDefs = [base paginationTypeDefs, loreTypeDefs, personTypeDefs]; 
