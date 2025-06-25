@@ -81,10 +81,6 @@ export const loreTypeDefs = gql`
       after: String
       searchToken: String
     ): LoreConnection!
-    
-    # Legacy query (keep for backward compatibility)
-    allLore(searchToken: String): [Lore]
-    lore(LORE_ID: Int!): Lore
   }
 
   extend type Mutation {
