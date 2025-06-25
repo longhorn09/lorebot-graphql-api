@@ -1,6 +1,43 @@
 # lorebot-graphql-api
 Backend microservice in NodeJS using GraphQL and CloudSQL database
 
+## Project Structure
+
+```
+lorebot-graphql-api/
+├── index.mjs                 # Main application entry point - Apollo Server setup
+├── package.json              # Node.js dependencies and scripts configuration
+├── package-lock.json         # Locked dependency versions for reproducible builds
+├── LICENSE                   # Project license file
+├── README.md                 # This documentation file
+├── schema/                   # GraphQL schema definitions and resolvers
+│   ├── index.js              # Main schema file that combines all type definitions
+│   ├── types/                # GraphQL type definitions
+│   │   ├── index.js          # Exports all type definitions
+│   │   ├── common.js         # Common GraphQL types (PageInfo, etc.)
+│   │   ├── lore.js           # Lore entity type definitions and queries
+│   │   └── person.js         # Person entity type definitions and queries
+│   └── resolvers/            # GraphQL resolver implementations
+│       ├── index.js          # Exports all resolvers
+│       ├── lore.js           # Lore entity resolvers (queries and mutations)
+│       └── person.js         # Person entity resolvers (queries and mutations)
+└── services/                 # Business logic and external service integrations
+    └── db.mjs                # Database connection and query utilities
+```
+
+### File Descriptions
+
+- **`index.mjs`**: Main application entry point that sets up the Apollo GraphQL server, configures middleware, and starts the HTTP server
+- **`package.json`**: Defines project metadata, dependencies, and npm scripts for development and deployment
+- **`schema/index.js`**: Combines all GraphQL type definitions and resolvers into a single schema
+- **`schema/types/`**: Contains GraphQL type definitions organized by entity
+  - **`common.js`**: Shared GraphQL types like PageInfo for pagination
+  - **`lore.js`**: Lore entity types, queries, and mutations
+  - **`person.js`**: Person entity types, queries, and mutations
+- **`schema/resolvers/`**: Contains the resolver implementations that handle GraphQL operations
+  - **`lore.js`**: Implements all Lore-related queries and mutations with database operations
+  - **`person.js`**: Implements all Person-related queries and mutations with database operations
+- **`services/db.mjs`**: Database service layer providing connection management and query utilities for CloudSQL
 
 ## Dependencies
 
@@ -8,16 +45,6 @@ Dependencies will be automatically installed with `npm install` but to install d
 ```
 npm install @apollo/server @google-cloud/cloud-sql-connector dotenv graphql graphql-tag mysql2 express
 ```
-
-## .env
-`.env` file for use with `dotenv` should be structured in below fashion.
-Generally `DB_PAGESIZE` should be kept at `3` to stay within Discord messaging limits.
-There's an existing example.env as a boilerplate, in Linux command line perform following command:
-```
-cp env.template .env
-```
-
-`dotenv` is a design decision favored over `config.json` 
 
 ## CloudSQL API enablement
 Run following in Cloud Shell to enable requisite APIs
