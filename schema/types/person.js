@@ -91,8 +91,6 @@ export const personTypeDefs = gql`
       first: Int = 10
       after: String
       filter: PersonFilterInput
-      orderBy: PersonOrderBy = CREATE_DATE
-      orderDirection: OrderDirection = DESC
     ): PersonConnection!
     
     # Legacy query (keep for backward compatibility)

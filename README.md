@@ -39,6 +39,87 @@ lorebot-graphql-api/
   - **`person.js`**: Implements all Person-related queries and mutations with database operations
 - **`services/db.mjs`**: Database service layer providing connection management and query utilities for CloudSQL
 
+## Architecture
+
+The lorebot-graphql-api follows a layered architecture pattern with clear separation of concerns:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    External Clients                        │
+│  (Discord Bot, Web Apps, Mobile Apps, etc.)               │
+└─────────────────────┬───────────────────────────────────────┘
+                      │ HTTP/HTTPS
+                      ▼
+┌─────────────────────────────────────────────────────────────┐
+│                    Apollo GraphQL Server                   │
+│  • Express.js HTTP server                                  │
+│  • GraphQL endpoint (/graphql)                             │
+│  • Request/response handling                               │
+│  • Authentication & authorization                          │
+└─────────────────────┬───────────────────────────────────────┘
+                      │ GraphQL Operations
+                      ▼
+┌─────────────────────────────────────────────────────────────┐
+│                    GraphQL Schema Layer                    │
+│  • Type definitions (Lore, Person, etc.)                   │
+│  • Query & Mutation schemas                                │
+│  • Input validation                                        │
+│  • Resolver implementations                                │
+└─────────────────────┬───────────────────────────────────────┘
+                      │ Database Queries
+                      ▼
+┌─────────────────────────────────────────────────────────────┐
+│                    Database Service Layer                  │
+│  • Connection pooling                                      │
+│  • Query execution                                         │
+│  • Transaction management                                  │
+│  • Error handling                                          │
+└─────────────────────┬───────────────────────────────────────┘
+                      │ CloudSQL Connection
+                      ▼
+┌─────────────────────────────────────────────────────────────┐
+│                    Google Cloud SQL                        │
+│  • MySQL Database                                          │
+│  • Managed service                                         │
+│  • Automatic backups                                       │
+│  • High availability                                       │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Architecture Components
+
+**1. Apollo GraphQL Server**
+- Built on Express.js for HTTP handling
+- Provides GraphQL endpoint at `/graphql`
+- Handles CORS, authentication, and request routing
+- Supports introspection and GraphQL Playground
+
+**2. GraphQL Schema Layer**
+- Defines the API contract with type definitions
+- Implements resolvers for queries and mutations
+- Provides pagination support with cursor-based navigation
+- Handles input validation and error responses
+
+**3. Database Service Layer**
+- Manages CloudSQL connections using `@google-cloud/cloud-sql-connector`
+- Implements connection pooling for performance
+- Provides query utilities and transaction support
+- Handles database-specific error scenarios
+
+**4. Google Cloud SQL**
+- Managed MySQL database service
+- Automatic scaling and maintenance
+- Built-in security and compliance features
+- Integration with Google Cloud IAM for access control
+
+### Data Flow
+
+1. **Client Request**: External clients send GraphQL queries/mutations via HTTP
+2. **Apollo Server**: Receives and parses GraphQL operations
+3. **Schema Resolution**: GraphQL schema routes operations to appropriate resolvers
+4. **Database Query**: Resolvers execute database queries through the service layer
+5. **Response**: Results are formatted and returned to the client
+
 ## Dependencies
 
 Dependencies will be automatically installed with `npm install` but to install discretely run following

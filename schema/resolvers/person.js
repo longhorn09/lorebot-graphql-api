@@ -53,23 +53,11 @@ const buildWhereClause = (filters) => {
   };
 };
 
-// Helper function to validate orderBy field
-const validateOrderBy = (orderBy) => {
-  const validFields = ['PERSON_ID', 'CHARNAME', 'SUBMITTER', 'CREATE_DATE', 'CLAN_ID'];
-  if (!validFields.includes(orderBy)) {
-    throw new Error(`Invalid orderBy field: ${orderBy}`);
-  }
-  return orderBy;
-};
-
 export const personResolvers = {
   Query: {
     // Cursor-based pagination (GraphQL standard)
-    allPersonsConnection: async (_parent, { first = 10, after, filter, orderBy = 'PERSON_ID', orderDirection = 'ASC' }, _context, _info) => {
+    allPersonsConnection: async (_parent, { first = 10, after, filter }, _context, _info) => {
       try {
-        // Validate orderBy field
-        const validatedOrderBy = validateOrderBy(orderBy);
-        
         const { whereClause, params } = buildWhereClause(filter);
         
         // Get total count
@@ -95,8 +83,7 @@ export const personResolvers = {
         // Add cursor condition
         if (after) {
           const afterValue = decodeCursor(after);
-          const operator = orderDirection === 'ASC' ? '>' : '<';
-          conditions.push(`${validatedOrderBy} ${operator} ?`);
+          conditions.push('PERSON_ID > ?');
           queryParams.push(afterValue);
         }
         
@@ -105,8 +92,9 @@ export const personResolvers = {
           queryStr += ` WHERE ${conditions.join(' AND ')}`;
         }
         
-        // Add ordering
-        queryStr += ` ORDER BY ${validatedOrderBy} ${orderDirection}`;
+        // Add ordering (default to PERSON_ID ASC)
+        //queryStr += ` ORDER BY CREATE_DATE DESC`;   // paging issues
+        queryStr += ` ORDER BY PERSON_ID ASC`;  
         
         // Use string interpolation for LIMIT since we control the value
         const limit = first + 1; // Get one extra to check if there's a next page
@@ -118,7 +106,7 @@ export const personResolvers = {
         
         const edges = items.map(item => ({
           node: item,
-          cursor: createCursor(item[validatedOrderBy])
+          cursor: createCursor(item.PERSON_ID)
         }));
         
         return {
