@@ -45,44 +45,47 @@ The lorebot-graphql-api follows a layered architecture pattern with clear separa
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                    External Clients                        │
-│  (Discord Bot, Web Apps, Mobile Apps, etc.)               │
+│                    External Clients                         │
+│  • Discord bot front-end w/Discordjs v14                    │
+│  • Discord slash commands with ephemeral interaction        │
+│  • Parsing user messages to construct GraphQL input query   │
+│  • Express.js HTTP server                                   │
 └─────────────────────┬───────────────────────────────────────┘
                       │ HTTP/HTTPS
                       ▼
 ┌─────────────────────────────────────────────────────────────┐
-│                    Apollo GraphQL Server                   │
-│  • Express.js HTTP server                                  │
-│  • GraphQL endpoint (/graphql)                             │
-│  • Request/response handling                               │
-│  • Authentication & authorization                          │
+│                    Apollo GraphQL Server                    │
+│  • Express.js HTTP server                                   │
+│  • GraphQL endpoint (/graphql)                              │
+│  • Request/response handling                                │
+│  • Authentication & authorization                           │
 └─────────────────────┬───────────────────────────────────────┘
                       │ GraphQL Operations
                       ▼
 ┌─────────────────────────────────────────────────────────────┐
-│                    GraphQL Schema Layer                    │
-│  • Type definitions (Lore, Person, etc.)                   │
-│  • Query & Mutation schemas                                │
-│  • Input validation                                        │
-│  • Resolver implementations                                │
+│                    GraphQL Schema Layer                     │
+│  • Type definitions (Lore, Person, etc.)                    │
+│  • Query & Mutation schemas                                 │
+│  • Input validation                                         │
+│  • Resolver implementations                                 │
 └─────────────────────┬───────────────────────────────────────┘
                       │ Database Queries
                       ▼
 ┌─────────────────────────────────────────────────────────────┐
-│                    Database Service Layer                  │
-│  • Connection pooling                                      │
-│  • Query execution                                         │
-│  • Transaction management                                  │
-│  • Error handling                                          │
+│                    Database Service Layer                   │
+│  • Connection pooling                                       │
+│  • Query execution                                          │
+│  • Transaction management                                   │
+│  • Error handling                                           │
 └─────────────────────┬───────────────────────────────────────┘
                       │ CloudSQL Connection
                       ▼
 ┌─────────────────────────────────────────────────────────────┐
-│                    Google Cloud SQL                        │
-│  • MySQL Database                                          │
-│  • Managed service                                         │
-│  • Automatic backups                                       │
-│  • High availability                                       │
+│                    Google Cloud SQL                         │
+│  • MySQL Database                                           │
+│  • Managed service                                          │
+│  • Automatic backups                                        │
+│  • High availability                                        │
 └─────────────────────────────────────────────────────────────┘
 ```
 
