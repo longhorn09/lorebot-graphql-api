@@ -2,10 +2,10 @@
   "name": "lorebot-graphql-api",
   "version": "1.0.0",
   "description": "Backend microservice in NodeJS using GraphQL and CloudSQL database",
-  "main": "index.mjs",
+  "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
-    ,"start": "node index.mjs"
+    ,"start": "node index.js"
   },
   "type": "module",
   "repository": {
