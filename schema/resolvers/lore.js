@@ -1,5 +1,6 @@
 import { query } from '../../services/db.mjs';
-
+import moment from 'moment';
+import { MYSQL_DATETIME_FORMAT, proper } from '../../constants/index.js';
 
 // Helper function to create cursor from ID
 const createCursor = (id) => Buffer.from(id.toString()).toString('base64');
@@ -184,7 +185,9 @@ export const loreResolvers = {
         // Log the full expanded SQL query for debugging
         //console.log('lore.allLorePaginated:', expandSqlQuery(queryStr, queryParams));
         
-        const results = await query(queryStr, queryParams);
+        const results = await query(queryStr, queryParams);       // <== query execution here
+
+        
         const hasNextPage = results.length > first;
         const items = hasNextPage ? results.slice(0, first) : results;
         
@@ -215,62 +218,42 @@ export const loreResolvers = {
       try {
         const { OBJECT_NAME, ...loreData } = input;
         
-        // Check if lore with this OBJECT_NAME already exists
-        const existingLore = await query('SELECT * FROM Lore WHERE OBJECT_NAME = ?', [OBJECT_NAME]);
+       // console.log('loreData:', loreData);
+        // Build stored procedure call with parameters in the same order as the example
+        const sqlStr = "CALL CreateLore(" +
+          ((OBJECT_NAME) ? `'${OBJECT_NAME.replace("'","\\'")}'` : null) + "," +
+          ((loreData.ITEM_TYPE) ? `'${loreData.ITEM_TYPE}'` : null) + "," +
+          ((loreData.ITEM_IS) ? `'${loreData.ITEM_IS}'` : null) + "," +
+          ((loreData.SUBMITTER) ? `'${loreData.SUBMITTER}'` : null) + "," +
+          ((loreData.AFFECTS) ? `'${loreData.AFFECTS}'` : null) + "," +
+          ((loreData.APPLY) ? loreData.APPLY : null) + "," +
+          ((loreData.RESTRICTS) ? `'${loreData.RESTRICTS}'` : null) + "," +
+          ((loreData.WEAP_CLASS) ? `'${loreData.WEAP_CLASS}'` : null) + "," +
+          ((loreData.MAT_CLASS) ? `'${loreData.MAT_CLASS}'` : null) + "," +
+          ((loreData.MATERIAL) ? `'${loreData.MATERIAL}'` : null) + "," +
+          ((loreData.ITEM_VALUE) ? `'${loreData.ITEM_VALUE}'` : null) + "," +
+          ((loreData.EXTRA) ? `'${loreData.EXTRA}'` : null) + "," +
+          ((loreData.IMMUNE) ? `'${loreData.IMMUNE}'` : null) + "," +
+          ((loreData.EFFECTS) ? `'${loreData.EFFECTS}'` : null) + "," +
+          ((loreData.WEIGHT) ? loreData.WEIGHT : null) + "," +
+          ((loreData.CAPACITY) ? loreData.CAPACITY : null) + "," +
+          ((loreData.ITEM_LEVEL) ? `'${loreData.ITEM_LEVEL}'` : null) + "," +
+          ((loreData.CONTAINER_SIZE) ? loreData.CONTAINER_SIZE : null) + "," +
+          ((loreData.CHARGES) ? loreData.CHARGES : null) + "," +
+          ((loreData.SPEED) ? loreData.SPEED : null) + "," +
+          ((loreData.ACCURACY) ? loreData.ACCURACY : null) + "," +
+          ((loreData.POWER) ? loreData.POWER : null) + "," +
+          ((loreData.DAMAGE) ? `'${loreData.DAMAGE}'` : null) + ")";
+          
+        // Execute the stored procedure
+        const result = await query(sqlStr, []);
         
-        if (existingLore.length > 0) {
-          // Update existing lore
-          const loreId = existingLore[0].LORE_ID;
-          console.log('Updating lore:', OBJECT_NAME, 'with ID:', loreId, loreData);
-          
-          // Build UPDATE query
-          const updateFields = Object.keys(loreData)
-            .filter(key => loreData[key] !== undefined && loreData[key] !== null)
-            .map(key => `${key} = ?`);
-          
-          const updateValues = Object.keys(loreData)
-            .filter(key => loreData[key] !== undefined && loreData[key] !== null)
-            .map(key => loreData[key]);
-          
-          if (updateFields.length === 0) {
-            throw new Error('No valid fields to update');
-          }
-          
-          const updateQuery = `UPDATE Lore SET ${updateFields.join(', ')} WHERE OBJECT_NAME = ?`;
-          const queryParams = [...updateValues, OBJECT_NAME];
-          
-          await query(updateQuery, queryParams);
-          
-          // Return the updated lore data
-          return { LORE_ID: loreId, OBJECT_NAME, ...loreData };
-        } else {
-          // Add new lore
-          console.log('Adding new lore:', OBJECT_NAME, loreData);
-          
-          // Set default values for required fields if not provided
-          const insertData = {
-            OBJECT_NAME,
-            ...loreData,
-            CREATE_DATE: loreData.CREATE_DATE || new Date().toISOString().split('T')[0],
-            SUBMITTER: loreData.SUBMITTER || 'system'
-          };
-          
-          // Build INSERT query
-          const insertFields = Object.keys(insertData)
-            .filter(key => insertData[key] !== undefined && insertData[key] !== null);
-          
-          const insertValues = insertFields
-            .map(key => insertData[key]);
-          
-          const placeholders = insertFields.map(() => '?').join(', ');
-          const insertQuery = `INSERT INTO Lore (${insertFields.join(', ')}) VALUES (${placeholders})`;
-          
-          const result = await query(insertQuery, insertValues);
-          
-          // Get the inserted ID and return the complete lore data
-          const newLoreId = result.insertId;
-          return { LORE_ID: newLoreId, ...insertData };
-        }
+        // log after execution of stored proc
+        console.log(`${moment().format(MYSQL_DATETIME_FORMAT)} : ${loreData.SUBMITTER.padEnd(30)} insert/update '${OBJECT_NAME}'` );
+        
+        // Return the lore data (the stored procedure should return the created/updated lore)
+        return { ...input, LORE_ID: result.insertId || result[0]?.LORE_ID };
+        
       } catch (error) {
         console.error('Error in addOrUpdateLore:', error);
         throw new Error(`Failed to add or update lore with OBJECT_NAME: ${input.OBJECT_NAME}`);

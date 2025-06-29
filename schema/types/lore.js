@@ -2,7 +2,7 @@ import gql from 'graphql-tag';
 
 export const loreTypeDefs = gql`
   type Lore {
-    LORE_ID: Int!
+    LORE_ID: Int
     OBJECT_NAME: String
     ITEM_TYPE: String
     ITEM_IS: String

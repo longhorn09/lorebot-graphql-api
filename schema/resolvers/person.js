@@ -1,4 +1,6 @@
 import { query } from '../../services/db.mjs';
+import moment from 'moment';
+import { MYSQL_DATETIME_FORMAT, proper } from '../../constants/index.js';
 
 // Helper function to create cursor from ID
 const createCursor = (value) => {
@@ -65,9 +67,17 @@ export const personResolvers = {
     allPersonsConnection: async (_parent, { first = 10, after, filter }, _context, _info) => {
       try {
         const { whereClause, params } = buildWhereClause(filter);
-        
+        //console.log('filter:', filter);
+        if (filter != null) {   // falsy - ie. undefined or null, don't do !==, too stringest with undefined possible value
+          console.log(`${moment().format(MYSQL_DATETIME_FORMAT)} : ${'Submitter TBD'.padEnd(30)} !who ${proper(filter.CHARNAME)}`);
+        }
+        else {
+          console.log(`${moment().format(MYSQL_DATETIME_FORMAT)} : ${'Submitter TBD'.padEnd(30)} !whoall`);
+        }
+        //console.log('_info:', _context);
         // Get total count
         const countResult = await query(`SELECT COUNT(*) as total FROM Person ${whereClause}`, params);
+        
         const totalCount = countResult[0].total;
         
         // Build query with cursor pagination
@@ -148,6 +158,21 @@ export const personResolvers = {
       try {
         //console.log('Processing person:', input.CHARNAME);
         
+        // Inspect context and info parameters
+        /*
+        console.log('=== PERSON RESOLVER DEBUG ===');
+        console.log('_context:', JSON.stringify(_context, null, 2));
+        console.log('_info keys:', Object.keys(_info));
+        console.log('_info.fieldName:', _info.fieldName);
+        console.log('_info.operation:', _info.operation);
+        console.log('_info.returnType:', _info.returnType);
+        console.log('_info.parentType:', _info.parentType);
+        console.log('_info.variableValues:', _info.variableValues);
+        console.log('_info.path:', _info.path);
+        console.log('_info.fieldNodes:', _info.fieldNodes);
+        console.log('===========================');
+        */
+        
         // Build stored procedure call with parameters in the same order as Person type definition
         // need to add ONCHEST to the backend stored procedure and table
         //  ((input.CREATE_DATE) ? `'${escapeString(input.CREATE_DATE)}'` : null) + "," +
@@ -184,6 +209,7 @@ export const personResolvers = {
         
         // Execute the stored procedure
         const result = await query(sqlStr, []);
+        console.log(`${moment().format(MYSQL_DATETIME_FORMAT)} : ${input.SUBMITTER.padEnd(30)} !who ${input.CHARNAME}`);
         
         // Return the person data (the stored procedure should return the created/updated person)
         return { ...input, PERSON_ID: result.insertId || result[0]?.PERSON_ID };
@@ -194,27 +220,5 @@ export const personResolvers = {
       }
     },
 
-    /*
-    deletePerson: async (_parent, { PERSON_ID }, _context, _info) => {
-      try {
-        // Implementation for deleting person
-        console.log('Deleting person:', PERSON_ID);
-        
-        // First check if person exists
-        const existingPerson = await query('SELECT * FROM Person WHERE PERSON_ID = ?', [PERSON_ID]);
-        if (existingPerson.length === 0) {
-          throw new Error('Person not found');
-        }
-        
-        // Delete the person
-        await query('DELETE FROM Person WHERE PERSON_ID = ?', [PERSON_ID]);
-        
-        return { PERSON_ID };
-      } catch (error) {
-        console.error('Error deleting person:', error);
-        throw new Error('Failed to delete person');
-      }
-    },  
-    */
   },
 }; 
