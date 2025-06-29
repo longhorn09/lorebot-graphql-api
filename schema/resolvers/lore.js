@@ -175,7 +175,7 @@ export const loreResolvers = {
         const countQueryStr = searchConditions.length > 0 
           ? `SELECT COUNT(*) as total FROM Lore WHERE ${searchConditions.join(' AND ')}`
           : 'SELECT COUNT(*) as total FROM Lore';
-        const countResult = await query(countQueryStr, searchParams);
+        const countResult = await query(countQueryStr, searchParams);   // <== query execution here
         const totalCount = countResult[0].total;
         
         // Add ordering and limit
@@ -186,6 +186,14 @@ export const loreResolvers = {
         //console.log('lore.allLorePaginated:', expandSqlQuery(queryStr, queryParams));
         
         const results = await query(queryStr, queryParams);       // <== query execution here
+        //console.log(requestedFields + '  ' + requestedFields.length);
+        if (requestedFields.toString().trim() == "LORE_ID,OBJECT_NAME" || requestedFields.toString().trim() == "OBJECT_NAME") {
+          console.log(`${moment().format(MYSQL_DATETIME_FORMAT)} : ${'tbd'.toString().padEnd(30)} !brief ${searchToken}`);
+        }
+        else {
+          console.log(`${moment().format(MYSQL_DATETIME_FORMAT)} : ${'tbd'.toString().padEnd(30)} !stat ${searchToken}`);
+
+        }
 
         
         const hasNextPage = results.length > first;
