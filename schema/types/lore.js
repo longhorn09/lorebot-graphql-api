@@ -41,6 +41,7 @@ export const loreTypeDefs = gql`
   }
 
   input LoreInput {
+    # LORE_ID: Int
     OBJECT_NAME: String
     ITEM_TYPE: String
     ITEM_IS: String
@@ -84,8 +85,6 @@ export const loreTypeDefs = gql`
   }
 
   extend type Mutation {
-    addLore(input: LoreInput): Lore
-    updateLore(LORE_ID: Int!, input: LoreInput): Lore
-    deleteLore(LORE_ID: Int!): Lore
+    addOrUpdateLore(input: LoreInput!): Lore
   }
 `; 

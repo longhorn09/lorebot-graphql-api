@@ -211,39 +211,69 @@ export const loreResolvers = {
   },
 
   Mutation: {
-    addLore: async (_parent, { input }, _context, _info) => {
+    addOrUpdateLore: async (_parent, { input }, _context, _info) => {
       try {
-        // Implementation for adding lore
-        console.log('Adding lore:', input);
-        // Add your INSERT query here
-        return input;
+        const { OBJECT_NAME, ...loreData } = input;
+        
+        // Check if lore with this OBJECT_NAME already exists
+        const existingLore = await query('SELECT * FROM Lore WHERE OBJECT_NAME = ?', [OBJECT_NAME]);
+        
+        if (existingLore.length > 0) {
+          // Update existing lore
+          const loreId = existingLore[0].LORE_ID;
+          console.log('Updating lore:', OBJECT_NAME, 'with ID:', loreId, loreData);
+          
+          // Build UPDATE query
+          const updateFields = Object.keys(loreData)
+            .filter(key => loreData[key] !== undefined && loreData[key] !== null)
+            .map(key => `${key} = ?`);
+          
+          const updateValues = Object.keys(loreData)
+            .filter(key => loreData[key] !== undefined && loreData[key] !== null)
+            .map(key => loreData[key]);
+          
+          if (updateFields.length === 0) {
+            throw new Error('No valid fields to update');
+          }
+          
+          const updateQuery = `UPDATE Lore SET ${updateFields.join(', ')} WHERE OBJECT_NAME = ?`;
+          const queryParams = [...updateValues, OBJECT_NAME];
+          
+          await query(updateQuery, queryParams);
+          
+          // Return the updated lore data
+          return { LORE_ID: loreId, OBJECT_NAME, ...loreData };
+        } else {
+          // Add new lore
+          console.log('Adding new lore:', OBJECT_NAME, loreData);
+          
+          // Set default values for required fields if not provided
+          const insertData = {
+            OBJECT_NAME,
+            ...loreData,
+            CREATE_DATE: loreData.CREATE_DATE || new Date().toISOString().split('T')[0],
+            SUBMITTER: loreData.SUBMITTER || 'system'
+          };
+          
+          // Build INSERT query
+          const insertFields = Object.keys(insertData)
+            .filter(key => insertData[key] !== undefined && insertData[key] !== null);
+          
+          const insertValues = insertFields
+            .map(key => insertData[key]);
+          
+          const placeholders = insertFields.map(() => '?').join(', ');
+          const insertQuery = `INSERT INTO Lore (${insertFields.join(', ')}) VALUES (${placeholders})`;
+          
+          const result = await query(insertQuery, insertValues);
+          
+          // Get the inserted ID and return the complete lore data
+          const newLoreId = result.insertId;
+          return { LORE_ID: newLoreId, ...insertData };
+        }
       } catch (error) {
-        console.error('Error adding lore:', error);
-        throw new Error('Failed to add lore');
-      }
-    },
-
-    updateLore: async (_parent, { LORE_ID, input }, _context, _info) => {
-      try {
-        // Implementation for updating lore
-        console.log('Updating lore:', LORE_ID, input);
-        // Add your UPDATE query here
-        return { LORE_ID, ...input };
-      } catch (error) {
-        console.error('Error updating lore:', error);
-        throw new Error('Failed to update lore');
-      }
-    },
-
-    deleteLore: async (_parent, { LORE_ID }, _context, _info) => {
-      try {
-        // Implementation for deleting lore
-        console.log('Deleting lore:', LORE_ID);
-        // Add your DELETE query here
-        return { LORE_ID };
-      } catch (error) {
-        console.error('Error deleting lore:', error);
-        throw new Error('Failed to delete lore');
+        console.error('Error in addOrUpdateLore:', error);
+        throw new Error(`Failed to add or update lore with OBJECT_NAME: ${input.OBJECT_NAME}`);
       }
     },
   },
