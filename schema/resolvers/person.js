@@ -53,6 +53,12 @@ const buildWhereClause = (filters) => {
   };
 };
 
+// Helper function to escape single quotes in strings
+const escapeString = (str) => {
+  if (!str) return null;
+  return str.replace(/'/g, "\\'");
+};
+
 export const personResolvers = {
   Query: {
     // Cursor-based pagination (GraphQL standard)
@@ -138,40 +144,77 @@ export const personResolvers = {
   },
 
   Mutation: {
-    addPerson: async (_parent, { input }, _context, _info) => {
+    addOrUpdatePerson: async (_parent, { input }, _context, _info) => {
       try {
-        // Implementation for adding person
-        console.log('Adding person:', input);
-        // Add your INSERT query here
-        return input;
+        //console.log('Processing person:', input.CHARNAME);
+        
+        // Build stored procedure call with parameters in the same order as Person type definition
+        // need to add ONCHEST to the backend stored procedure and table
+        //  ((input.CREATE_DATE) ? `'${escapeString(input.CREATE_DATE)}'` : null) + "," +
+        const sqlStr = "CALL CreatePerson(" +
+          ((input.CHARNAME) ? `'${escapeString(input.CHARNAME)}'` : null) + "," +
+          ((input.LIGHT) ? `'${escapeString(input.LIGHT)}'` : null) + "," +
+          ((input.RING1) ? `'${escapeString(input.RING1)}'` : null) + "," +
+          ((input.RING2) ? `'${escapeString(input.RING2)}'` : null) + "," +
+          ((input.NECK1) ? `'${escapeString(input.NECK1)}'` : null) + "," +
+          ((input.NECK2) ? `'${escapeString(input.NECK2)}'` : null) + "," +
+          ((input.BODY) ? `'${escapeString(input.BODY)}'` : null) + "," +
+          //((input.ONCHEST) ? `'${escapeString(input.ONCHEST)}'` : null) + "," +
+          ((input.HEAD) ? `'${escapeString(input.HEAD)}'` : null) + "," +
+          ((input.LEGS) ? `'${escapeString(input.LEGS)}'` : null) + "," +
+          ((input.FEET) ? `'${escapeString(input.FEET)}'` : null) + "," +
+          ((input.ARMS) ? `'${escapeString(input.ARMS)}'` : null) + "," +
+          ((input.SLUNG) ? `'${escapeString(input.SLUNG)}'` : null) + "," +
+          ((input.HANDS) ? `'${escapeString(input.HANDS)}'` : null) + "," +
+          ((input.SHIELD) ? `'${escapeString(input.SHIELD)}'` : null) + "," +
+          ((input.ABOUT) ? `'${escapeString(input.ABOUT)}'` : null) + "," +
+          ((input.WAIST) ? `'${escapeString(input.WAIST)}'` : null) + "," +
+          ((input.POUCH) ? `'${escapeString(input.POUCH)}'` : null) + "," +
+          ((input.RWRIST) ? `'${escapeString(input.RWRIST)}'` : null) + "," +
+          ((input.LWRIST) ? `'${escapeString(input.LWRIST)}'` : null) + "," +
+          ((input.PRIMARY_WEAP) ? `'${escapeString(input.PRIMARY_WEAP)}'` : null) + "," +
+          ((input.SECONDARY_WEAP) ? `'${escapeString(input.SECONDARY_WEAP)}'` : null) + "," +
+          ((input.HELD) ? `'${escapeString(input.HELD)}'` : null) + "," +
+          ((input.BOTH_HANDS) ? `'${escapeString(input.BOTH_HANDS)}'` : null) + "," +
+          ((input.SUBMITTER) ? `'${escapeString(input.SUBMITTER)}'` : null) + "," +        
+          ((input.CLAN_ID) ? input.CLAN_ID : null) +
+          ")";
+        
+        //console.log('Executing stored procedure:', sqlStr);
+        
+        // Execute the stored procedure
+        const result = await query(sqlStr, []);
+        
+        // Return the person data (the stored procedure should return the created/updated person)
+        return { ...input, PERSON_ID: result.insertId || result[0]?.PERSON_ID };
+        
       } catch (error) {
-        console.error('Error adding person:', error);
-        throw new Error('Failed to add person');
+        console.error('Error in addOrUpdatePerson:', error);
+        throw new Error(`Failed to add or update person with CHARNAME: ${input.CHARNAME}`);
       }
     },
 
-    updatePerson: async (_parent, { PERSON_ID, input }, _context, _info) => {
-      try {
-        // Implementation for updating person
-        console.log('Updating person:', PERSON_ID, input);
-        // Add your UPDATE query here
-        return { PERSON_ID, ...input };
-      } catch (error) {
-        console.error('Error updating person:', error);
-        throw new Error('Failed to update person');
-      }
-    },
-
+    /*
     deletePerson: async (_parent, { PERSON_ID }, _context, _info) => {
       try {
         // Implementation for deleting person
         console.log('Deleting person:', PERSON_ID);
-        // Add your DELETE query here
+        
+        // First check if person exists
+        const existingPerson = await query('SELECT * FROM Person WHERE PERSON_ID = ?', [PERSON_ID]);
+        if (existingPerson.length === 0) {
+          throw new Error('Person not found');
+        }
+        
+        // Delete the person
+        await query('DELETE FROM Person WHERE PERSON_ID = ?', [PERSON_ID]);
+        
         return { PERSON_ID };
       } catch (error) {
         console.error('Error deleting person:', error);
         throw new Error('Failed to delete person');
       }
-    },
+    },  
+    */
   },
 }; 

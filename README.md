@@ -5,7 +5,7 @@ Backend microservice in NodeJS using GraphQL and CloudSQL database
 
 ```
 lorebot-graphql-api/
-├── index.mjs                 # Main application entry point - Apollo Server setup
+├── index.js                  # Main application entry point - Apollo Server setup
 ├── package.json              # Node.js dependencies and scripts configuration
 ├── package-lock.json         # Locked dependency versions for reproducible builds
 ├── LICENSE                   # Project license file
@@ -27,7 +27,7 @@ lorebot-graphql-api/
 
 ### File Descriptions
 
-- **`index.mjs`**: Main application entry point that sets up the Apollo GraphQL server, configures middleware, and starts the HTTP server
+- **`index.js`**: Main application entry point that sets up the Apollo GraphQL server, configures middleware, and starts the HTTP server
 - **`package.json`**: Defines project metadata, dependencies, and npm scripts for development and deployment
 - **`schema/index.js`**: Combines all GraphQL type definitions and resolvers into a single schema
 - **`schema/types/`**: Contains GraphQL type definitions organized by entity

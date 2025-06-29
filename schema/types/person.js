@@ -10,6 +10,7 @@ export const personTypeDefs = gql`
     NECK1: String
     NECK2: String
     BODY: String
+    ONCHEST: String
     HEAD: String
     LEGS: String
     FEET: String
@@ -26,9 +27,9 @@ export const personTypeDefs = gql`
     SECONDARY_WEAP: String
     HELD: String
     BOTH_HANDS: String
-    SUBMITTER: String
-    CREATE_DATE: String
-    CLAN_ID: Int
+    SUBMITTER: String!
+    CREATE_DATE: String!
+    #CLAN_ID: Int
   }
 
   type PersonEdge {
@@ -50,6 +51,7 @@ export const personTypeDefs = gql`
     NECK1: String
     NECK2: String
     BODY: String
+    ONCHEST: String
     HEAD: String
     LEGS: String
     FEET: String
@@ -68,7 +70,7 @@ export const personTypeDefs = gql`
     BOTH_HANDS: String
     SUBMITTER: String
     CREATE_DATE: String
-    CLAN_ID: Int
+    # CLAN_ID: Int
   }
 
   input PersonFilterInput {
@@ -98,8 +100,7 @@ export const personTypeDefs = gql`
   }
 
   extend type Mutation {
-    addPerson(input: PersonInput!): Person
-    updatePerson(PERSON_ID: Int!, input: PersonInput!): Person
-    deletePerson(PERSON_ID: Int!): Person
+    addOrUpdatePerson(input: PersonInput!): Person
+    #deletePerson(PERSON_ID: Int!): Person
   }
 `; 
