@@ -64,15 +64,15 @@ const escapeString = (str) => {
 export const personResolvers = {
   Query: {
     // Cursor-based pagination (GraphQL standard)
-    allPersonsConnection: async (_parent, { first = 10, after, filter }, _context, _info) => {
+    allPersonsConnection: async (_parent, { first = 10, after, filter, submitter }, _context, _info) => {
       try {
         const { whereClause, params } = buildWhereClause(filter);
         //console.log('filter:', filter);
         if (filter != null) {   // falsy - ie. undefined or null, don't do !==, too stringest with undefined possible value
-          console.log(`${moment().format(MYSQL_DATETIME_FORMAT)} : ${'Submitter TBD'.padEnd(30)} !who ${proper(filter.CHARNAME)}`);
+          console.log(`${moment().format(MYSQL_DATETIME_FORMAT)} : ${submitter.padEnd(30)} /who ${proper(filter.CHARNAME)}`);
         }
         else {
-          console.log(`${moment().format(MYSQL_DATETIME_FORMAT)} : ${'Submitter TBD'.padEnd(30)} !whoall`);
+          console.log(`${moment().format(MYSQL_DATETIME_FORMAT)} : ${submitter.padEnd(30)} /whoall`);
         }
         //console.log('_info:', _context);
         // Get total count
@@ -209,7 +209,7 @@ export const personResolvers = {
         
         // Execute the stored procedure
         const result = await query(sqlStr, []);
-        console.log(`${moment().format(MYSQL_DATETIME_FORMAT)} : ${input.SUBMITTER.padEnd(30)} !who ${input.CHARNAME}`);
+        console.log(`${moment().format(MYSQL_DATETIME_FORMAT)} : ${input.SUBMITTER.padEnd(30)} /who ${input.CHARNAME}`);
         
         // Return the person data (the stored procedure should return the created/updated person)
         return { ...input, PERSON_ID: result.insertId || result[0]?.PERSON_ID };

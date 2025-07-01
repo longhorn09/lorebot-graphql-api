@@ -67,7 +67,7 @@ export const loreResolvers = {
      * @param {*} _info 
      * @returns 
      */
-    allLorePaginated: async (_parent, { first = 10, after, searchToken }, context, _info) => {
+    allLorePaginated: async (_parent, { first = 10, after, searchToken, submitter }, context, _info) => {
       try {
         // Extract requested fields from GraphQL query
         const requestedFields = _info.fieldNodes[0].selectionSet.selections
@@ -182,16 +182,16 @@ export const loreResolvers = {
         const limit = first + 1; // Get one extra to check if there's a next page
         queryStr += ` ORDER BY LORE_ID ASC LIMIT ${limit}`;
         
-        // Log the full expanded SQL query for debugging
-        //console.log('lore.allLorePaginated:', expandSqlQuery(queryStr, queryParams));
+        // Log submitter before query execution
+        //console.log(`${moment().format(MYSQL_DATETIME_FORMAT)} : ${(submitter || 'unknown').padEnd(30)} /stat ${searchToken || 'all'}`);
         
         const results = await query(queryStr, queryParams);       // <== query execution here
         //console.log(requestedFields + '  ' + requestedFields.length);
         if (requestedFields.toString().trim() == "LORE_ID,OBJECT_NAME" || requestedFields.toString().trim() == "OBJECT_NAME") {
-          console.log(`${moment().format(MYSQL_DATETIME_FORMAT)} : ${'tbd'.toString().padEnd(30)} !brief ${searchToken}`);
+          console.log(`${moment().format(MYSQL_DATETIME_FORMAT)} : ${(submitter || 'unknown').toString().padEnd(30)} /brief ${searchToken}`);
         }
         else {
-          console.log(`${moment().format(MYSQL_DATETIME_FORMAT)} : ${'tbd'.toString().padEnd(30)} !stat ${searchToken}`);
+          console.log(`${moment().format(MYSQL_DATETIME_FORMAT)} : ${(submitter || 'unknown').toString().padEnd(30)} /stat ${searchToken}`);
 
         }
 
@@ -217,6 +217,100 @@ export const loreResolvers = {
       } catch (error) {
         console.error('Error fetching paginated lore with search:', error);
         throw new Error('Failed to fetch paginated lore data');
+      }
+    },
+
+    /**
+     * Flexible query with dynamic criteria - allows custom search logic
+     * @param {*} _parent 
+     * @param {*} param1 
+     * @param {*} context 
+     * @param {*} _info 
+     * @returns 
+     */
+    FlexQuery: async (_parent, { first = 10, after, submitter, flexCriteria }, context, _info) => {
+      try {
+        // Extract requested fields from GraphQL query
+        const requestedFields = _info.fieldNodes[0].selectionSet.selections
+          .find(selection => selection.name.value === 'edges')
+          ?.selectionSet?.selections
+          ?.find(selection => selection.name.value === 'node')
+          ?.selectionSet?.selections?.map(selection => selection.name.value) || [];
+        
+        // Build dynamic SELECT statement
+        const selectFields = requestedFields.length > 0 ? requestedFields.join(', ') : '*';
+        let queryStr = `SELECT ${selectFields} FROM Lore`;
+        let queryParams = [];
+        
+        // Build WHERE conditions
+        const conditions = [];
+        
+        // TODO: Parse flexCriteria and build dynamic WHERE conditions
+        // Example structure for building dynamic SQL:
+        // if (flexCriteria.includes('weapon')) {
+        //   conditions.push('ITEM_TYPE = ?');
+        //   queryParams.push('weapon');
+        // }
+        // if (flexCriteria.includes('magic')) {
+        //   conditions.push('EFFECTS LIKE ?');
+        //   queryParams.push('%magic%');
+        // }
+        
+        // Add cursor condition for pagination
+        if (after) {
+          const afterId = decodeCursor(after);
+          conditions.push('LORE_ID > ?');
+          queryParams.push(afterId);
+        }
+        
+        // Combine all conditions
+        if (conditions.length > 0) {
+          queryStr += ` WHERE ${conditions.join(' AND ')}`;
+        }
+        
+        // Get total count for the search (without pagination)
+        const countConditions = [];
+        const countParams = [];
+        
+        // TODO: Rebuild search conditions for count query (excluding pagination)
+        // This should mirror the logic above but without the cursor condition
+        
+        const countQueryStr = countConditions.length > 0 
+          ? `SELECT COUNT(*) as total FROM Lore WHERE ${countConditions.join(' AND ')}`
+          : 'SELECT COUNT(*) as total FROM Lore';
+        const countResult = await query(countQueryStr, countParams);
+        const totalCount = countResult[0].total;
+        
+        // Add ordering and limit
+        const limit = first + 1; // Get one extra to check if there's a next page
+        queryStr += ` ORDER BY LORE_ID ASC LIMIT ${limit}`;
+        
+        // Log the query execution
+        console.log(`${moment().format(MYSQL_DATETIME_FORMAT)} : ${submitter.padEnd(30)} /flex ${flexCriteria}`);
+        
+        const results = await query(queryStr, queryParams);
+        
+        const hasNextPage = results.length > first;
+        const items = hasNextPage ? results.slice(0, first) : results;
+        
+        const edges = items.map(item => ({
+          node: item,
+          cursor: createCursor(item.LORE_ID)
+        }));
+        
+        return {
+          edges,
+          pageInfo: {
+            hasNextPage,
+            hasPreviousPage: !!after,
+            startCursor: edges.length > 0 ? edges[0].cursor : null,
+            endCursor: edges.length > 0 ? edges[edges.length - 1].cursor : null
+          },
+          totalCount
+        };
+      } catch (error) {
+        console.error('Error in FlexQuery:', error);
+        throw new Error('Failed to execute flexible query');
       }
     },
   },

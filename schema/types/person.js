@@ -93,6 +93,7 @@ export const personTypeDefs = gql`
       first: Int = 10
       after: String
       filter: PersonFilterInput
+      submitter: String!
     ): PersonConnection!
     
     # Legacy query (keep for backward compatibility)

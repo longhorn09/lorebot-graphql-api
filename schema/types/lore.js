@@ -3,7 +3,7 @@ import gql from 'graphql-tag';
 export const loreTypeDefs = gql`
   type Lore {
     LORE_ID: Int
-    OBJECT_NAME: String
+    OBJECT_NAME: String!
     ITEM_TYPE: String
     ITEM_IS: String
     SUBMITTER: String
@@ -42,10 +42,10 @@ export const loreTypeDefs = gql`
 
   input LoreInput {
     # LORE_ID: Int
-    OBJECT_NAME: String
+    OBJECT_NAME: String!
     ITEM_TYPE: String
     ITEM_IS: String
-    SUBMITTER: String
+    SUBMITTER: String!
     AFFECTS: String
     APPLY: Int
     RESTRICTS: String
@@ -81,6 +81,15 @@ export const loreTypeDefs = gql`
       first: Int = 10
       after: String
       searchToken: String
+      submitter: String!
+    ): LoreConnection!
+    
+    # Flexible query with dynamic criteria
+    FlexQuery(
+      first: Int = 10
+      after: String
+      submitter: String!
+      flexCriteria: String!
     ): LoreConnection!
   }
 
