@@ -12,7 +12,7 @@ export const recentResolvers = {
         const paddedUser = (DISCORD_USER || 'Unknown').padEnd(30);
         console.log(`${timestamp} : ${paddedUser} !recent`);
         */
-        console.log(`${moment().format(MYSQL_DATETIME_FORMAT)} : ${(DISCORD_USER || 'Unknown').padEnd(30)} !recent`);
+        console.log(`${moment().format(MYSQL_DATETIME_FORMAT)} : ${(DISCORD_USER || 'Unknown').padEnd(30)} /recent`);
         
         // Placeholder for stored procedure call that takes no input arguments
         const sqlStr = "CALL GetRecent()";
