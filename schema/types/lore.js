@@ -88,7 +88,7 @@ export const loreTypeDefs = gql`
     FlexQuery(
       first: Int = 10
       after: String
-      submitter: String!
+      requestor: String!
       flexCriteria: String!
     ): LoreConnection!
   }

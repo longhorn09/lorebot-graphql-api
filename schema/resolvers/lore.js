@@ -19,6 +19,81 @@ const expandSqlQuery = (sql, params) => {
   return expandedSql;
 };
 
+
+
+/**
+ * Validates if the criteria string contains valid key-value pairs
+ * Supports operators: =, >, <, >=, <=
+ * Multiple pairs separated by &
+ * Exact same function and validation logic as used client side in lorebot-discord-client
+ * @param {string} criteria - The criteria string to validate
+ * @returns {boolean} - True if valid, false otherwise
+ */
+const isValidCriteria = (criteria) => {
+  let isValid = true;
+  
+  // Check if criteria is empty or null
+  //console.log("criteria:", criteria);
+  if (!criteria || criteria.trim() === '') {
+    isValid = false;
+  } 
+  else {
+    // Split by & to get individual key-value pairs
+    const pairs = criteria.split('&');
+    
+    // Check each pair
+    for (const pair of pairs) {
+      const trimmedPair = pair.trim();
+      
+      // Skip empty pairs
+      if (trimmedPair.length === 0 || trimmedPair == '') {
+        continue;
+      }
+      
+      // Check if pair matches the pattern: key=value, key>value, key<value, key>=value, key<=value
+      const patternRegex = /^([A-Za-z\_]+)(?:=|>|<|>=|<=)\s*(?:[^\&\=\<\>])+\s*$/;
+      
+      if (!patternRegex.test(trimmedPair)) {
+        isValid = false;
+        break;
+      }
+      else {
+        // make sure one of the expected key name pairs
+        switch (patternRegex.exec(trimmedPair)[1].toLowerCase()) {
+          case "speed":
+          case "accuracy":
+          case "power":
+          case "charges":
+          case "weight":
+          case "item_value":
+          case "apply":
+          case "capacity":
+          case "container_size":
+          case "item_type":
+          case "item_is":
+          case "submitter":
+          case "restricts":
+          case "class":
+          case "mat_class":
+          case "material":
+          case "immune":
+          case "effects":
+          case "damage":                      
+          case "affects":            
+          case "object_name":
+            isValid = true;
+            break;
+          default:
+            isValid = false;
+            break;
+          }
+        }
+    }
+  }
+  //console.log("in isValidCriteria():", isValid);
+  return isValid;
+} 
+
 // Helper function to build WHERE clause from filters
 const buildWhereClause = (filters) => {
   if (!filters) {
@@ -228,7 +303,7 @@ export const loreResolvers = {
      * @param {*} _info 
      * @returns 
      */
-    FlexQuery: async (_parent, { first = 10, after, submitter, flexCriteria }, context, _info) => {
+    FlexQuery: async (_parent, { first = 10, after, requestor, flexCriteria }, context, _info) => {
       try {
         // Extract requested fields from GraphQL query
         const requestedFields = _info.fieldNodes[0].selectionSet.selections
@@ -245,17 +320,68 @@ export const loreResolvers = {
         // Build WHERE conditions
         const conditions = [];
         
-        // TODO: Parse flexCriteria and build dynamic WHERE conditions
-        // Example structure for building dynamic SQL:
-        // if (flexCriteria.includes('weapon')) {
-        //   conditions.push('ITEM_TYPE = ?');
-        //   queryParams.push('weapon');
-        // }
-        // if (flexCriteria.includes('magic')) {
-        //   conditions.push('EFFECTS LIKE ?');
-        //   queryParams.push('%magic%');
-        // }
-        
+        if (isValidCriteria(flexCriteria)) {
+          const pairs = flexCriteria.split('&');    
+          // Check each pair
+          for (const pair of pairs) {
+            const trimmedPair = pair.trim();
+            
+            // Skip empty pairs
+            if (trimmedPair.length === 0 || trimmedPair == '') {
+              continue;
+            }
+            
+            // Check if pair matches the pattern: key=value, key>value, key<value, key>=value, key<=value
+            const patternRegex = /^([A-Za-z\_]+)(=|>|<|>=|<=)\s*([^\&\=\<\>]+)\s*$/;
+            
+            if (patternRegex.test(trimmedPair)) {
+              //console.log(patternRegex.exec(trimmedPair)[1].toString().toUpperCase() + ' ' + patternRegex.exec(trimmedPair)[2].toString() + ' ' + patternRegex.exec(trimmedPair)[3].toString());
+              
+              const fieldName = patternRegex.exec(trimmedPair)[1].toString().toLowerCase();
+              const operator = patternRegex.exec(trimmedPair)[2].toString();
+              const value = patternRegex.exec(trimmedPair)[3].toString().trim();
+
+              conditions.push(fieldName + ' ' + operator + ' ?');
+              //console.log("conditions:", conditions);
+               switch (fieldName) {
+                 // these are the only integer fields
+                 case "speed":
+                 case "accuracy":
+                 case "power":
+                 case "charges":
+                 case "weight":
+                 case "item_value":
+                 case "apply":
+                 case "capacity":
+                 case "container_size":
+                   // Safety check for integer parsing
+                   const intValue = parseInt(value);
+                   if (isNaN(intValue)) {
+                     console.warn(`⚠️  Invalid integer value for field ${fieldName}: "${value}". Skipping condition.`);
+                     continue; // Skip this condition and continue to next pair
+                   }
+                   else {
+                    queryParams.push(parseInt(value));
+                  }
+                   break;
+                 default:
+                   // For string fields, add the value as-is
+                   queryParams.push(value);
+                   break;
+               }
+              //conditions.push(trimmedPair);
+              //break;
+            }
+            else {
+              break;
+            }
+        }
+      }
+      else {
+        //console.log("Invalid criteria:", flexCriteria);
+        return { edges: [], pageInfo: { hasNextPage: false, hasPreviousPage: false, startCursor: null, endCursor: null }, totalCount: 0 };
+      }
+
         // Add cursor condition for pagination
         if (after) {
           const afterId = decodeCursor(after);
@@ -267,28 +393,92 @@ export const loreResolvers = {
         if (conditions.length > 0) {
           queryStr += ` WHERE ${conditions.join(' AND ')}`;
         }
-        
+        //console.log("queryStr:", queryStr);
+        //console.log("queryParams:", queryParams);
         // Get total count for the search (without pagination)
+        // Build count query with same conditions but NO cursor condition
+        let countQueryStr = 'SELECT COUNT(*) as total FROM Lore';
+        let countParams = [];
+        
+        // Rebuild conditions for count query (excluding cursor condition)
         const countConditions = [];
-        const countParams = [];
         
-        // TODO: Rebuild search conditions for count query (excluding pagination)
-        // This should mirror the logic above but without the cursor condition
+        // Re-add the original flexCriteria conditions
+        if (isValidCriteria(flexCriteria)) {
+          const pairs = flexCriteria.split('&');    
+          for (const pair of pairs) {
+            const trimmedPair = pair.trim();
+            
+            if (trimmedPair.length === 0 || trimmedPair == '') {
+              continue;
+            }
+            
+            const patternRegex = /^([A-Za-z\_]+)(=|>|<|>=|<=)\s*([^\&\=\<\>]+)\s*$/;
+            
+            if (patternRegex.test(trimmedPair)) {
+              const fieldName = patternRegex.exec(trimmedPair)[1].toString().toLowerCase();
+              const operator = patternRegex.exec(trimmedPair)[2].toString();
+              const value = patternRegex.exec(trimmedPair)[3].toString().trim();
+
+              countConditions.push(fieldName + ' ' + operator + ' ?');
+              
+              switch (fieldName) {
+                case "speed":
+                case "accuracy":
+                case "power":
+                case "charges":
+                case "weight":
+                case "item_value":
+                case "apply":
+                case "capacity":
+                case "container_size":
+                  const intValue = parseInt(value);
+                  if (isNaN(intValue)) {
+                    console.warn(`⚠️  Invalid integer value for field ${fieldName}: "${value}". Skipping condition.`);
+                    continue;
+                  }
+                  else {
+                    countParams.push(parseInt(value));
+                  }
+                  break;
+                default:
+                  countParams.push(value);
+                  break;
+              }
+            }
+          }
+        }
         
-        const countQueryStr = countConditions.length > 0 
-          ? `SELECT COUNT(*) as total FROM Lore WHERE ${countConditions.join(' AND ')}`
-          : 'SELECT COUNT(*) as total FROM Lore';
-        const countResult = await query(countQueryStr, countParams);
+        if (countConditions.length > 0) {
+          countQueryStr += ` WHERE ${countConditions.join(' AND ')}`;
+        }
+        
+        // ##### BEGIN COUNT(*) QUERY EXECUTION ######################
+        const countResult = await query(countQueryStr, countParams);        
         const totalCount = countResult[0].total;
         
-        // Add ordering and limit
+        // ##### END COUNT(*) QUERY EXECUTION ########################
+        
+        // Add ordering and limit for main query
         const limit = first + 1; // Get one extra to check if there's a next page
         queryStr += ` ORDER BY LORE_ID ASC LIMIT ${limit}`;
         
-        // Log the query execution
-        console.log(`${moment().format(MYSQL_DATETIME_FORMAT)} : ${submitter.padEnd(30)} /flex ${flexCriteria}`);
+        // Debug pagination info
+        /*
+        console.log(`📄 Pagination: first=${first}, after=${after}, limit=${limit}`);
+        if (after) {
+          console.log(`📄 Cursor decoded: ${decodeCursor(after)}`);
+        }
+        */
+        // Log only the initial query execution (not pagination requests)
+        if (after === null) {
+          console.log(`${moment().format(MYSQL_DATETIME_FORMAT)} : ${requestor.padEnd(30)} /flex criteria ${flexCriteria}`);
+        }        
         
+        // ###################### BEGIN QUERY EXECUTION ########################
         const results = await query(queryStr, queryParams);
+        // ###################### END QUERY EXECUTION ########################
+        
         
         const hasNextPage = results.length > first;
         const items = hasNextPage ? results.slice(0, first) : results;
