@@ -144,6 +144,7 @@ Replace ${GOOGLE_CLOUD_PROJECT} with name of your project
 ### Common error(s)
 If receiving a `NO_ADC_FOUND` error, need to setup the application default credentials `ADC`
 ```
+echo $GOOGLE_APPLICATION_CREDENTIALS
 gcloud init --console-only
 gcloud auth application-default login --no-browser
 ```

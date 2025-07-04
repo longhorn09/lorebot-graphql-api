@@ -1,4 +1,5 @@
 import { query } from '../../services/db.mjs';
+//import logger from '../../services/logger.mjs';
 import moment from 'moment';
 import { MYSQL_DATETIME_FORMAT } from '../../constants/index.js';
 
@@ -12,7 +13,22 @@ export const recentResolvers = {
         const paddedUser = (DISCORD_USER || 'Unknown').padEnd(30);
         console.log(`${timestamp} : ${paddedUser} !recent`);
         */
-        console.log(`${moment().format(MYSQL_DATETIME_FORMAT)} : ${(DISCORD_USER || 'Unknown').padEnd(30)} /recent`);
+        // Log the Discord user who made the request
+        const logMessage = `${moment().format(MYSQL_DATETIME_FORMAT)} : ${(DISCORD_USER || 'Unknown').padEnd(30)} /recent`;
+        //console.log(logMessage);
+        /*
+        try {
+          await logger.info('Recent data requested', {
+            discordUser: DISCORD_USER || 'Unknown',
+            timestamp: moment().format(MYSQL_DATETIME_FORMAT),
+            operation: 'recent'
+          });
+        } catch (error) {
+          console.error('Error logging recent data:', error);
+          console.log(logMessage);
+        }
+        */
+        console.log(logMessage);
         
         // Placeholder for stored procedure call that takes no input arguments
         const sqlStr = "CALL GetRecent()";
@@ -32,6 +48,12 @@ export const recentResolvers = {
         
       } catch (error) {
         console.error('Error fetching recent data:', error);
+        await logger.error('Failed to fetch recent data', {
+          discordUser: DISCORD_USER || 'Unknown',
+          error: error.message,
+          stack: error.stack,
+          operation: 'recent'
+        });
         throw new Error('Failed to fetch recent data');
       }
     },
