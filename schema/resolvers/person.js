@@ -35,13 +35,15 @@ const buildWhereClause = (filters) => {
   const params = [];
   
   if (filters.CHARNAME) {
-    conditions.push('CHARNAME LIKE ?');
-    params.push(`%${filters.CHARNAME}%`);
+    //conditions.push('CHARNAME LIKE ?');
+    //params.push(`%${filters.CHARNAME}%`);
+    conditions.push('CHARNAME = ?');
+    params.push(filters.CHARNAME);
   }
   
   if (filters.SUBMITTER) {
-    conditions.push('SUBMITTER LIKE ?');
-    params.push(`%${filters.SUBMITTER}%`);
+    conditions.push('SUBMITTER = ?');
+    params.push(filters.SUBMITTER);
   }
   
   if (filters.CLAN_ID) {
