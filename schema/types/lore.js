@@ -27,6 +27,7 @@ export const loreTypeDefs = gql`
     ACCURACY: Int
     POWER: Int
     DAMAGE: String
+    CAN_USE: String
   }
 
   type LoreEdge {
@@ -66,6 +67,7 @@ export const loreTypeDefs = gql`
     ACCURACY: Int
     POWER: Int
     DAMAGE: String
+    CAN_USE: String
   }
 
   input LoreFilterInput {

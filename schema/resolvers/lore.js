@@ -81,6 +81,7 @@ const isValidCriteria = (criteria) => {
           case "damage":                      
           case "affects":            
           case "object_name":
+          case "can_use":
             isValid = true;
             break;
           default:
@@ -202,6 +203,7 @@ const buildConditionsFromFlexCriteria = (flexCriteria) => {
         case "immune":
         case "effects":
         case "damage":
+        case "can_use":
           conditions[conditions.length - 1] = fieldName.toUpperCase() + ' LIKE ?';
           params.push(`%${value}%`);
           break;
@@ -527,7 +529,7 @@ export const loreResolvers = {
         
        // console.log('loreData:', loreData);
         // Build stored procedure call with parameters in the same order as the example
-        const sqlStr = "CALL CreateLore(" +
+        const sqlStr = "CALL CreateLore_v002(" +
           ((OBJECT_NAME) ? `'${OBJECT_NAME.replace("'","\\'")}'` : null) + "," +
           ((loreData.ITEM_TYPE) ? `'${loreData.ITEM_TYPE}'` : null) + "," +
           ((loreData.ITEM_IS) ? `'${loreData.ITEM_IS}'` : null) + "," +
@@ -550,7 +552,8 @@ export const loreResolvers = {
           ((loreData.SPEED) ? loreData.SPEED : null) + "," +
           ((loreData.ACCURACY) ? loreData.ACCURACY : null) + "," +
           ((loreData.POWER) ? loreData.POWER : null) + "," +
-          ((loreData.DAMAGE) ? `'${loreData.DAMAGE}'` : null) + ")";
+          ((loreData.DAMAGE) ? `'${loreData.DAMAGE}'` : null) + "," +
+          ((loreData.CAN_USE) ? `'${loreData.CAN_USE}'` : null) + ")" ;  
           
         // Execute the stored procedure
         const result = await query(sqlStr, []);
