@@ -140,9 +140,9 @@ const buildWhereClause = (filters) => {
 const buildConditionsFromFlexCriteria = (flexCriteria) => {
   const conditions = [];
   const params = [];
-  let half1= null 
-  let half2= null
-  let match = null
+  let half1= null ;
+  let half2= null;
+  let match = null;
   let affectsArr = []
   
   if (!isValidCriteria(flexCriteria)) {
@@ -166,7 +166,7 @@ const buildConditionsFromFlexCriteria = (flexCriteria) => {
       const value = patternRegex.exec(trimmedPair)[3].toString().trim();
       
       // Handle special case for 'value' field
-      if (fieldName == 'value') {
+      if (fieldName == 'value' || fieldName == 'item_value' || fieldName == 'item value') {
         conditions.push('ITEM_VALUE ' + operator + ' ?');
       } else {
         conditions.push(fieldName.toUpperCase() + ' ' + operator + ' ?');
@@ -215,7 +215,30 @@ const buildConditionsFromFlexCriteria = (flexCriteria) => {
           //     HEALTH by 5
           
           affectsArr = value.split(",");
-          console.log(`affectsArr[${affectsArr.length}]:`, affectsArr);
+          //console.log(`affectsArr.length:`, affectsArr.length);
+          
+          for (let i = 0; i < affectsArr.length; i++) {
+            half1 = null, half2 = null, match = null;   
+            //console.log(`affectsArr[${affectsArr.length}]:`, affectsArr[i]);
+            if (/^([A-Za-z_\s]+)\s+by\s+([+-]?\d+(?:[A-Za-z_\s\d]+)?)$/.test( affectsArr[i].trim())) {
+              match = /^([A-Za-z_\s]+)\s+by\s+([+-]?\d+(?:[A-Za-z_\s\d]+)?)$/.exec(affectsArr[i].trim());
+              if (match != null && match.length === 3) {      // think matching index [0,1,2] -> length = 3
+                half1 = match[1].trim();
+                var temphalf2 = match[2].trim();
+                half2 = temphalf2.replace(/\+/g, '\\+?'); 
+                //half2=match[2].trim();
+                //console.log(`matched: ${half1} ${half2}`);
+                if (i === 0){
+                  conditions[conditions.length - 1]= `Lore.${fieldName.toUpperCase()} REGEXP ?`;
+                  params.push(`.*${half1}[[:space:]]+by[[:space:]]+${half2}.*`);
+                }
+                else {
+                  conditions.push(`Lore.${fieldName.toUpperCase()} REGEXP ?`);
+                  params.push(`.*${half1}[[:space:]]+by[[:space:]]+${half2}.*`);
+                }
+              }
+            }
+          }
           //affectsArr.push(value);
           break;
         default:
@@ -443,8 +466,8 @@ export const loreResolvers = {
           countQueryStr += ` WHERE ${countConditions.join(' AND ')}`;
         }
         
-        console.log("countQueryStr:", countQueryStr);
-        console.log("countParams:", countParams);
+        //console.log("countQueryStr:", countQueryStr);
+        //console.log("countParams:", countParams);
         // ##### BEGIN COUNT(*) QUERY EXECUTION ######################
         const countResult = await query(countQueryStr, countParams);        
         const totalCount = countResult[0].total;
