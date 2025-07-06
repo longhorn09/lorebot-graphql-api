@@ -4,10 +4,9 @@
 //require('dotenv').config(); // Load environment variables from .env
 import dotenv from 'dotenv';
 import { ApolloServer } from '@apollo/server';
-import { startStandaloneServer } from '@apollo/server/standalone';
-import { expressMiddleware } from '@apollo/server/express4';
-import express from 'express';
-import cors from 'cors';
+import { fastifyApolloHandler } from '@as-integrations/fastify';
+import fastify from 'fastify';
+import cors from '@fastify/cors';
 import { typeDefs, resolvers } from './schema/index.js'; // Import from new modular schema
 import { query, connectDB } from './services/db.mjs';
 dotenv.config();
@@ -18,31 +17,40 @@ async function startServer() {
     const dbConnection = await connectDB();
     console.log('Successfully connected to Cloud SQL (MySQL)!');
 
-    // Create Express app
-    const app = express();
+    // Create Fastify app
+    const app = fastify({
+      logger: {
+        level: 'error',  // Only log errors, not info/warn
+        transport: {
+          target: 'pino-pretty',
+          options: {
+            colorize: true
+          }
+        }
+      }
+    });
     
-    // Add CORS middleware
-    app.use(cors());
-    
-    // Add JSON body parser
-    app.use(express.json());
+    // Register CORS plugin
+    await app.register(cors, {
+      origin: true, // Configure according to your needs
+      credentials: true
+    });
 
     // Health check endpoint
-    app.get('/health', (req, res) => {
+    app.get('/health', async (request, reply) => {
       console.log('🏥 Health check request received');
-      res.status(200).json({
+      return {
         status: 'healthy',
         timestamp: new Date().toISOString(),
         service: 'lorebot-graphql-api',
         database: 'connected'
-      });
+      };
     });
 
     // Create a new ApolloServer instance
     const server = new ApolloServer({
       typeDefs,
       resolvers,
-      context: () => ({ db: dbConnection }), // Pass the database connection to resolvers
       // Environment-based configuration
       introspection: process.env.NODE_ENV !== 'production', // Enable in development, disable in production
       playground: process.env.NODE_ENV !== 'production',    // Enable in development, disable in production
@@ -76,58 +84,63 @@ async function startServer() {
       },
     });
 
-    // Start the server
+    // Start the Apollo server
     await server.start();
     
-    // Apply Apollo middleware to Express app
-    app.use('/graphql', expressMiddleware(server, {
-      context: async ({ req }) => {
-        // Log incoming requests for debugging
-        const userAgent = req.headers['user-agent'] || 'Unknown';
-        const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'Unknown';
-        const contentType = req.headers['content-type'] || 'Unknown';
-        const contentLength = req.headers['content-length'] || 'Unknown';
-        
-        // Check if detailed logging is enabled
-        const enableDetailedLogging = process.env.ENABLE_DETAILED_LOGGING === 'true';
-        
-        // Filter out common polling requests
-        const isPollingRequest = 
-          req.method === 'POST' && 
-          (!req.body || !req.body.query || req.body.query.trim() === '') &&
-          userAgent.includes('Mozilla') && 
-          ip === '::1';
-        
-        if (enableDetailedLogging && !isPollingRequest) {
-          console.log(`📥 ${req.method} ${req.url} - ${new Date().toISOString()}`);
-          console.log(`   User-Agent: ${userAgent}`);
-          console.log(`   IP: ${ip}`);
-          console.log(`   Content-Type: ${contentType}`);
-          console.log(`   Content-Length: ${contentLength}`);
+    // Register GraphQL route with Fastify
+    app.route({
+      url: '/graphql',
+      method: ['GET', 'POST'],
+      handler: fastifyApolloHandler(server, {
+        context: async (request, reply) => {
+          // Log incoming requests for debugging
+          const userAgent = request.headers['user-agent'] || 'Unknown';
+          const ip = request.headers['x-forwarded-for'] || request.ip || 'Unknown';
+          const contentType = request.headers['content-type'] || 'Unknown';
+          const contentLength = request.headers['content-length'] || 'Unknown';
           
-          // Log request body for debugging (be careful with sensitive data)
-          if (req.body && Object.keys(req.body).length > 0) {
-            console.log(`   Request Body: ${JSON.stringify(req.body).substring(0, 200)}...`);
+          // Check if detailed logging is enabled
+          const enableDetailedLogging = process.env.ENABLE_DETAILED_LOGGING === 'true';
+          
+          // Filter out common polling requests
+          const isPollingRequest = 
+            request.method === 'POST' && 
+            (!request.body || !request.body.query || request.body.query.trim() === '') &&
+            userAgent.includes('Mozilla') && 
+            ip === '::1';
+          
+          if (enableDetailedLogging && !isPollingRequest) {
+            console.log(`📥 ${request.method} ${request.url} - ${new Date().toISOString()}`);
+            console.log(`   User-Agent: ${userAgent}`);
+            console.log(`   IP: ${ip}`);
+            console.log(`   Content-Type: ${contentType}`);
+            console.log(`   Content-Length: ${contentLength}`);
+            
+            // Log request body for debugging (be careful with sensitive data)
+            if (request.body && Object.keys(request.body).length > 0) {
+              console.log(`   Request Body: ${JSON.stringify(request.body).substring(0, 200)}...`);
+            }
+          } else if (isPollingRequest && enableDetailedLogging) {
+            console.log(`🔄 Polling request detected (filtered) - ${new Date().toISOString()}`);
           }
-        } else if (isPollingRequest && enableDetailedLogging) {
-          console.log(`🔄 Polling request detected (filtered) - ${new Date().toISOString()}`);
-        }
-        
-        return { 
-          db: dbConnection,
-          userAgent,
-          ip
-        };
-      },
-    }));
-
-    // Start Express server
-    const port = process.env.PORT || 4000;
-    app.listen(port, () => {
-      console.log(`🚀  Server ready at: http://localhost:${port}/`);
-      console.log(`🏥  Health check available at: http://localhost:${port}/health`);
-      console.log(`📊  Apollo Studio available at: http://localhost:${port}/graphql`);
+          
+          return { 
+            db: dbConnection,
+            userAgent,
+            ip
+          };
+        },
+      }),
     });
+
+    // Start Fastify server
+    const port = process.env.PORT || 4000;
+    const host = process.env.HOST || '0.0.0.0';
+    
+    await app.listen({ port, host });
+    console.log(`🚀  Server ready at: http://localhost:${port}/`);
+    console.log(`🏥  Health check available at: http://localhost:${port}/health`);
+    console.log(`📊  Apollo Studio available at: http://localhost:${port}/graphql`);
   } catch (error) {
     console.error('❌ Error starting server:', error);
     process.exit(1); // Exit with an error code
