@@ -1,5 +1,5 @@
 # lorebot-graphql-api
-Backend microservice in NodeJS using GraphQL and CloudSQL database
+Backend microservice in NodeJS using GraphQL and CloudSQL database, leveraging Fastify and ApolloServer
 
 ## Project Structure
 
@@ -10,19 +10,25 @@ lorebot-graphql-api/
 ├── package-lock.json         # Locked dependency versions for reproducible builds
 ├── LICENSE                   # Project license file
 ├── README.md                 # This documentation file
+├── .gitignore                # Git ignore rules for the project
 ├── schema/                   # GraphQL schema definitions and resolvers
 │   ├── index.js              # Main schema file that combines all type definitions
 │   ├── types/                # GraphQL type definitions
 │   │   ├── index.js          # Exports all type definitions
 │   │   ├── common.js         # Common GraphQL types (PageInfo, etc.)
 │   │   ├── lore.js           # Lore entity type definitions and queries
-│   │   └── person.js         # Person entity type definitions and queries
+│   │   ├── person.js         # Person entity type definitions and queries
+│   │   └── recent.js         # Recent entity type definitions and queries
 │   └── resolvers/            # GraphQL resolver implementations
 │       ├── index.js          # Exports all resolvers
 │       ├── lore.js           # Lore entity resolvers (queries and mutations)
-│       └── person.js         # Person entity resolvers (queries and mutations)
-└── services/                 # Business logic and external service integrations
-    └── db.mjs                # Database connection and query utilities
+│       ├── person.js         # Person entity resolvers (queries and mutations)
+│       └── recent.js         # Recent entity resolvers (queries and mutations)
+├── services/                 # Business logic and external service integrations
+│   ├── db.mjs                # Database connection and query utilities
+│   └── logger.mjs            # Logging service for application events
+└── constants/                # Application constants and configuration
+    └── index.js              # Centralized constants and configuration values
 ```
 
 ### File Descriptions
@@ -34,10 +40,15 @@ lorebot-graphql-api/
   - **`common.js`**: Shared GraphQL types like PageInfo for pagination
   - **`lore.js`**: Lore entity types, queries, and mutations
   - **`person.js`**: Person entity types, queries, and mutations
+  - **`recent.js`**: Recent entity types, queries, and mutations
 - **`schema/resolvers/`**: Contains the resolver implementations that handle GraphQL operations
   - **`lore.js`**: Implements all Lore-related queries and mutations with database operations
   - **`person.js`**: Implements all Person-related queries and mutations with database operations
-- **`services/db.mjs`**: Database service layer providing connection management and query utilities for CloudSQL
+  - **`recent.js`**: Implements all Recent-related queries and mutations with database operations
+- **`services/`**: Business logic and external service integrations
+  - **`db.mjs`**: Database service layer providing connection management and query utilities for CloudSQL
+  - **`logger.mjs`**: Logging service for application events and debugging
+- **`constants/index.js`**: Centralized constants and configuration values used throughout the application
 
 ## Architecture
 
@@ -49,13 +60,13 @@ The lorebot-graphql-api follows a layered architecture pattern with clear separa
 │  • Discord bot front-end w/Discordjs v14                    │
 │  • Discord slash commands with ephemeral interaction        │
 │  • Parsing user messages to construct GraphQL input query   │
-│  • Express.js HTTP server                                   │
+│  • Fastify HTTP server                                      │
 └─────────────────────┬───────────────────────────────────────┘
                       │ HTTP/HTTPS
                       ▼
 ┌─────────────────────────────────────────────────────────────┐
 │                    Apollo GraphQL Server                    │
-│  • Express.js HTTP server                                   │
+│  • Fastify HTTP server                                      │
 │  • GraphQL endpoint (/graphql)                              │
 │  • Request/response handling                                │
 │  • Authentication & authorization                           │
@@ -92,7 +103,7 @@ The lorebot-graphql-api follows a layered architecture pattern with clear separa
 ### Architecture Components
 
 **1. Apollo GraphQL Server**
-- Built on Express.js for HTTP handling
+- Built on Fastify for HTTP handling
 - Provides GraphQL endpoint at `/graphql`
 - Handles CORS, authentication, and request routing
 - Supports introspection and GraphQL Playground
@@ -127,7 +138,7 @@ The lorebot-graphql-api follows a layered architecture pattern with clear separa
 
 Dependencies will be automatically installed with `npm install` but to install discretely run following
 ```
-npm install @apollo/server @google-cloud/cloud-sql-connector dotenv graphql graphql-tag mysql2 express
+npm install @apollo/server @google-cloud/cloud-sql-connector dotenv graphql graphql-tag mysql2 fastify
 ```
 
 ## CloudSQL API enablement
