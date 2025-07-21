@@ -14,19 +14,19 @@ let pool; // Declare a variable to hold the connection pool
  * @returns 
  */
 async function query(sql, params) {
-  //const connection = await mysql.createConnection(config.db);
-  const connection = await mysql.createConnection(
-  {
-    /* don't expose password or any sensitive info, done only for demo */
-    host: process.env.DB_HOST,
-    user: process.env.DB_USER,
-    password: process.env.DB_PASSWORD,
-    database: process.env.DB_NAME,
-  });
-  const [results, ] = await connection.execute(sql, params);
-
-  //console.log('db.mjs.query():', params);
-  return results;
+  // Ensure we have a connection pool
+  if (!pool) {
+    await connectDB();
+  }
+  
+  try {
+    // Use the connection pool instead of creating individual connections
+    const [results] = await pool.execute(sql, params);
+    return results;
+  } catch (error) {
+    console.error('Database query error:', error);
+    throw error;
+  }
 }
 
 /**
@@ -44,19 +44,34 @@ async function connectDB() {
     // IMPORTANT: Replace these placeholders with your actual Cloud SQL instance details.
     // For production, use environment variables, Secret Manager, or IAM service accounts.
     pool = mysql.createPool({
-      host: process.env.DB_HOST , // e.g., '127.0.0.1' for local or public IP/private IP for Cloud SQL
-      user: process.env.DB_USER ,
+      host: process.env.DB_HOST, // e.g., '127.0.0.1' for local or public IP/private IP for Cloud SQL
+      user: process.env.DB_USER,
       password: process.env.DB_PASSWORD,
-      database: process.env.DB_NAME ,
+      database: process.env.DB_NAME,
       waitForConnections: true, // If true, the pool will queue connections if none are available
-      connectionLimit: 5,      // Max number of connections to create at once
+      connectionLimit: 10,      // Increased max number of connections
       queueLimit: 0,            // Unlimited queueing of connections
+      acquireTimeout: 60000,    // 60 seconds timeout for acquiring connections
+      timeout: 60000,           // 60 seconds timeout for queries
       // Optional: For Cloud SQL connection string or Unix socket
       // socketPath: process.env.DB_SOCKET_PATH || '/cloudsql/PROJECT_ID:REGION:INSTANCE_NAME',
       // You might need to configure SSL/TLS for secure connections in production
       // ssl: {
       //   rejectUnauthorized: false // Set to true and provide CAs for production
       // }
+    });
+    
+    // Add event listeners for pool monitoring
+    pool.on('connection', (connection) => {
+      console.log('New database connection established');
+    });
+    
+    pool.on('acquire', (connection) => {
+      console.log('Connection acquired from pool');
+    });
+    
+    pool.on('release', (connection) => {
+      console.log('Connection released back to pool');
     });
     return pool;
   } catch (error) {
@@ -66,5 +81,32 @@ async function connectDB() {
   }
 }
 
+/**
+ * Closes the database connection pool gracefully
+ */
+async function closeDB() {
+  if (pool) {
+    try {
+      await pool.end();
+      console.log('Database connection pool closed successfully');
+    } catch (error) {
+      console.error('Error closing database connection pool:', error);
+    }
+  }
+}
+
+// Handle graceful shutdown
+process.on('SIGINT', async () => {
+  console.log('Received SIGINT, closing database connections...');
+  await closeDB();
+  process.exit(0);
+});
+
+process.on('SIGTERM', async () => {
+  console.log('Received SIGTERM, closing database connections...');
+  await closeDB();
+  process.exit(0);
+});
+
 //module.exports = {query, connectDB}
-export {query, connectDB}
+export {query, connectDB, closeDB}

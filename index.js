@@ -8,7 +8,7 @@ import { fastifyApolloHandler } from '@as-integrations/fastify';
 import fastify from 'fastify';
 import cors from '@fastify/cors';
 import { typeDefs, resolvers } from './schema/index.js'; // Import from new modular schema
-import { query, connectDB } from './services/db.mjs';
+import { query, connectDB, closeDB } from './services/db.mjs';
 dotenv.config();
 
 async function startServer() {
@@ -16,6 +16,15 @@ async function startServer() {
     // Connect to the database
     const dbConnection = await connectDB();
     console.log('Successfully connected to Cloud SQL (MySQL)!');
+    
+    // Test the connection
+    try {
+      await query('SELECT 1 as test');
+      console.log('Database connection test successful');
+    } catch (error) {
+      console.error('Database connection test failed:', error);
+      throw error;
+    }
 
     // Create Fastify app
     const app = fastify({
@@ -126,6 +135,7 @@ async function startServer() {
           
           return { 
             db: dbConnection,
+            query, // Make the query function available in context
             userAgent,
             ip
           };
@@ -141,6 +151,23 @@ async function startServer() {
     console.log(`🚀  Server ready at: http://localhost:${port}/`);
     console.log(`🏥  Health check available at: http://localhost:${port}/health`);
     console.log(`📊  Apollo Studio available at: http://localhost:${port}/graphql`);
+    
+    // Handle graceful shutdown
+    const gracefulShutdown = async (signal) => {
+      console.log(`\n${signal} received, shutting down gracefully...`);
+      try {
+        await app.close();
+        await closeDB();
+        console.log('Server and database connections closed successfully');
+        process.exit(0);
+      } catch (error) {
+        console.error('Error during graceful shutdown:', error);
+        process.exit(1);
+      }
+    };
+    
+    process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+    process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
   } catch (error) {
     console.error('❌ Error starting server:', error);
     process.exit(1); // Exit with an error code
