@@ -489,7 +489,7 @@ export const loreResolvers = {
         */
         // Log only the initial query execution (not pagination requests)
         if (after === null) {
-          console.log(`${moment().format(MYSQL_DATETIME_FORMAT)} : ${requestor.padEnd(30)} /flex criteria ${flexCriteria}`);
+          console.log(`${moment().format(MYSQL_DATETIME_FORMAT)} : ${requestor.padEnd(30)} /query criteria ${flexCriteria}`);
         }        
         
         // ###################### BEGIN QUERY EXECUTION ########################

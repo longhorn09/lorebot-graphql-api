@@ -61,15 +61,15 @@ async function connectDB() {
     
     // Add event listeners for pool monitoring
     pool.on('connection', (connection) => {
-      console.log('New database connection established');
+      //console.log('New database connection established');
     });
     
     pool.on('acquire', (connection) => {
-      console.log('Connection acquired from pool');
+      //console.log('Connection acquired from pool');
     });
     
     pool.on('release', (connection) => {
-      console.log('Connection released back to pool');
+      //console.log('Connection released back to pool');
     });
     return pool;
   } catch (error) {
