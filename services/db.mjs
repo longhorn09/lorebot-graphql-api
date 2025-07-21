@@ -51,8 +51,6 @@ async function connectDB() {
       waitForConnections: true, // If true, the pool will queue connections if none are available
       connectionLimit: 10,      // Increased max number of connections
       queueLimit: 0,            // Unlimited queueing of connections
-      acquireTimeout: 60000,    // 60 seconds timeout for acquiring connections
-      timeout: 60000,           // 60 seconds timeout for queries
       // Optional: For Cloud SQL connection string or Unix socket
       // socketPath: process.env.DB_SOCKET_PATH || '/cloudsql/PROJECT_ID:REGION:INSTANCE_NAME',
       // You might need to configure SSL/TLS for secure connections in production
