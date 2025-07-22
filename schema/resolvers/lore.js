@@ -228,15 +228,15 @@ const buildConditionsFromFlexCriteria = (flexCriteria) => {
                 half1 = match[1].trim();
                 var temphalf2 = match[2].trim();
                 half2 = temphalf2.replace(/\+/g, '\\+?'); 
-                //half2=match[2].trim();
+                
                 //console.log(`matched: ${half1} ${half2}`);
                 if (i === 0){
-                  conditions[conditions.length - 1]= `Lore.${fieldName.toUpperCase()} REGEXP ?`;
-                  params.push(`.*${half1}[[:space:]]+by[[:space:]]+${half2}.*`);
+                  conditions[conditions.length - 1]= `REGEXP_LIKE(Lore.${fieldName.toUpperCase()}, ?)`;
+                  params.push(`.*${half1}\\s+by\\s+${half2}.*$`);
                 }
                 else {
-                  conditions.push(`Lore.${fieldName.toUpperCase()} REGEXP ?`);
-                  params.push(`.*${half1}[[:space:]]+by[[:space:]]+${half2}.*`);
+                  conditions.push(`REGEXP_LIKE(Lore.${fieldName.toUpperCase()}, ?)`);
+                  params.push(`.*${half1}\\s+by\\s+${half2}.*$`);
                 }
               }
             }
@@ -457,9 +457,17 @@ export const loreResolvers = {
         if (conditions.length > 0) {
           queryStr += ` WHERE ${conditions.join(' AND ')}`;
         }
-        //console.log("queryStr:", queryStr);
-        //console.log("queryParams:", queryParams);
-        // Get total count for the search (without pagination)
+        
+        // Log the constructed SQL from buildConditionsFromFlexCriteria
+        /*
+        console.log('🔍 FlexQuery SQL constructed from buildConditionsFromFlexCriteria:');
+        console.log('🔍 Base query:', `SELECT ${selectFields} FROM Lore`);
+        console.log('🔍 Conditions:', conditions);
+        console.log('🔍 Flex params:', flexParams);
+        */
+        console.log('🔍 Final queryStr:', queryStr);
+        console.log('🔍 Final queryParams:', queryParams);
+        
         // Build count query with same conditions but NO cursor condition
         let countQueryStr = 'SELECT COUNT(*) as total FROM Lore';
         const { conditions: countConditions, params: countParams } = buildConditionsFromFlexCriteria(flexCriteria);
@@ -468,8 +476,13 @@ export const loreResolvers = {
           countQueryStr += ` WHERE ${countConditions.join(' AND ')}`;
         }
         
-        //console.log("countQueryStr:", countQueryStr);
-        //console.log("countParams:", countParams);
+        // Log the count query constructed from buildConditionsFromFlexCriteria
+        /*
+        console.log('🔍 FlexQuery COUNT SQL constructed from buildConditionsFromFlexCriteria:');
+        console.log('🔍 Count conditions:', countConditions);
+        console.log('🔍 Count params:', countParams);
+        console.log('🔍 Final countQueryStr:', countQueryStr);
+        */
         // ##### BEGIN COUNT(*) QUERY EXECUTION ######################
         const countResult = await query(countQueryStr, countParams);        
         const totalCount = countResult[0].total;
