@@ -169,7 +169,8 @@ const buildConditionsFromFlexCriteria = (flexCriteria) => {
       // Handle special case for 'value' field
       if (fieldName == 'value' || fieldName == 'item_value' || fieldName == 'item value') {
         conditions.push('ITEM_VALUE ' + operator + ' ?');
-      } else {
+      } 
+      else if (fieldName != 'affects') {
         conditions.push(fieldName.toUpperCase() + ' ' + operator + ' ?');
       }
       
@@ -216,29 +217,40 @@ const buildConditionsFromFlexCriteria = (flexCriteria) => {
           //     casting level by 2
           //     HEALTH by 5
           
-          affectsArr = value.split(",");
+          // Remove the general condition that was added above and replace with specific affects processing
+          // no longer needed due to row ~173 
+          //conditions.pop(); // Remove the general AFFECTS = ? condition
+          //params.pop();     // Remove the corresponding parameter
+          
+          affectsArr = value.split(",");        // singular or multiple affects
           //console.log(`affectsArr.length:`, affectsArr.length);
           
           for (let i = 0; i < affectsArr.length; i++) {
             half1 = null, half2 = null, match = null;   
-            //console.log(`affectsArr[${affectsArr.length}]:`, affectsArr[i]);
-            if (/^([A-Za-z_\s]+)\s+by\s+([+-]?\d+(?:[A-Za-z_\s\d]+)?)$/.test( affectsArr[i].trim())) {
-              match = /^([A-Za-z_\s]+)\s+by\s+([+-]?\d+(?:[A-Za-z_\s\d]+)?)$/.exec(affectsArr[i].trim());
-              if (match != null && match.length === 3) {      // think matching index [0,1,2] -> length = 3
-                half1 = match[1].trim();
-                var temphalf2 = match[2].trim();
-                half2 = temphalf2.replace(/\+/g, '\\+?'); 
-                
-                //console.log(`matched: ${half1} ${half2}`);
-                if (i === 0){
-                  conditions[conditions.length - 1]= `REGEXP_LIKE(Lore.${fieldName.toUpperCase()}, ?)`;
-                  params.push(`.*${half1}\\s+by\\s+${half2}.*$`);
+            //console.log(`affectsArr[${i}]:`, affectsArr[i]);
+            if (affectsArr[i].trim().indexOf(' by ') > 0) { 
+              if (/^([A-Za-z_\s]+)\s+by\s+([+-]?\d+(?:[A-Za-z_\s\d]+)?)$/.test( affectsArr[i].trim())) {
+                match = /^([A-Za-z_\s]+)\s+by\s+([+-]?\d+(?:[A-Za-z_\s\d]+)?)$/.exec(affectsArr[i].trim());
+                if (match != null && match.length === 3) {      // think matching index [0,1,2] -> length = 3
+                  half1 = match[1].trim();
+                  var temphalf2 = match[2].trim();
+                  half2 = temphalf2.replace(/\+/g, '\\+?'); 
+                  
+                  //console.log(`matched: ${half1} ${half2}`);
+                  if (i === 0){
+                    conditions.push(`REGEXP_LIKE(Lore.${fieldName.toUpperCase()}, ?)`);
+                    params.push(`.*${half1}\\s+by\\s+${half2}.*`);    // don't use ^ or $ because affects may contain multiple separated by commas  
+                  }
+                  else {
+                    conditions.push(`REGEXP_LIKE(Lore.${fieldName.toUpperCase()}, ?)`);
+                    params.push(`.*${half1}\\s+by\\s+${half2}.*`);    // don't use ^ or $ because affects may contain multiple separated by commas
+                  }
                 }
-                else {
-                  conditions.push(`REGEXP_LIKE(Lore.${fieldName.toUpperCase()}, ?)`);
-                  params.push(`.*${half1}\\s+by\\s+${half2}.*$`);
-                }
-              }
+              } // end of regex test
+            } // end of testing for ' by '
+            else {      // ie. /query affects=skill shield block           <=== no ' by '
+              conditions.push(`Lore.${fieldName.toUpperCase()} LIKE ?`);
+              params.push(`%${affectsArr[i].trim()}%`);
             }
           }
           //affectsArr.push(value);
@@ -459,13 +471,12 @@ export const loreResolvers = {
         }
         
         // Log the constructed SQL from buildConditionsFromFlexCriteria
-        /*
-        console.log('🔍 FlexQuery SQL constructed from buildConditionsFromFlexCriteria:');
-        console.log('🔍 Base query:', `SELECT ${selectFields} FROM Lore`);
+        
+        //console.log('🔍 FlexQuery SQL constructed from buildConditionsFromFlexCriteria:');
+        //console.log('🔍 Base query:', `SELECT ${selectFields} FROM Lore`);
         console.log('🔍 Conditions:', conditions);
-        console.log('🔍 Flex params:', flexParams);
-        */
-        console.log('🔍 Final queryStr:', queryStr);
+        //console.log('🔍 Flex params:', flexParams);        
+        //console.log('🔍 Final queryStr:', queryStr);
         console.log('🔍 Final queryParams:', queryParams);
         
         // Build count query with same conditions but NO cursor condition
