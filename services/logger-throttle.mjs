@@ -14,12 +14,12 @@ class ThrottledLogger {
     // Per-message type limits
     this.messageCounts = new Map();
     this.messageLimits = {
-      'sql_query': 50,    // Max 50 SQL queries per minute
-      'error': 100,       // Max 100 errors per minute
-      'debug': 20,        // Max 20 debug messages per minute
-      'graphql_request': 30, // Max 30 GraphQL requests per minute
-      'info': 200,        // Max 200 info messages per minute
-      'warn': 50          // Max 50 warning messages per minute
+      'sql_query': 15,    // Max 15 SQL queries per minute
+      'error': 15,       // Max 115 errors per minute
+      'debug': 15,        // Max 15 debug messages per minute
+      'graphql_request': 15, // Max 15 GraphQL requests per minute
+      'info': 15,        // Max 215 info messages per minute
+      'warn': 15          // Max 15 warning messages per minute
     };
     
     // Throttle tracking
