@@ -2,6 +2,11 @@ import {Logging} from '@google-cloud/logging';
 
 class ThrottledLogger {
   constructor() {
+    // Singleton pattern - return existing instance if it exists
+    if (ThrottledLogger.instance !== null && ThrottledLogger.instance !== undefined) {
+      return ThrottledLogger.instance;
+    }
+    
     this.logging = new Logging();
     this.log = this.logging.log('lorebot-graphql-api');
     
@@ -24,6 +29,9 @@ class ThrottledLogger {
     
     // Throttle tracking
     this.throttleEvents = new Map();
+    
+    // Store the instance
+    ThrottledLogger.instance = this;
   }
   
   refillTokens() {
@@ -97,11 +105,22 @@ class ThrottledLogger {
     });
   }
   
-  // Convenience methods
+  
+  /** 
+   * wrapper of native cloud logging method but to leverage throttling and rate limiting
+   * @param {*} message 
+   * @param {*} metadata 
+  */
   info(message, metadata = {}) {
     this.log('info', message, metadata);
   }
   
+  /**
+   * wrapper of native cloud logging method but to leverage throttling and rate limiting
+   * @param {*} message 
+   * @param {*} error 
+   * @param {*} metadata 
+   */
   error(message, error = null, metadata = {}) {
     this.log('error', message, {
       error: error?.message || error,
@@ -110,10 +129,21 @@ class ThrottledLogger {
     });
   }
   
+  /** 
+   * wrapper of native cloud logging method but to leverage throttling and rate limiting
+   * @param {*} message 
+   * @param {*} metadata 
+  */
   warn(message, metadata = {}) {
     this.log('warn', message, metadata);
   }
   
+
+  /** 
+   * wrapper of native cloud logging method but to leverage throttling and rate limiting
+   * @param {*} message 
+   * @param {*} metadata 
+  */  
   debug(message, metadata = {}) {
     this.log('debug', message, metadata);
   }
@@ -136,4 +166,5 @@ class ThrottledLogger {
   }
 }
 
-export default ThrottledLogger; 
+// Export a single instance (singleton)
+export default new ThrottledLogger(); 
