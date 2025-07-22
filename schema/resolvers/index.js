@@ -13,4 +13,7 @@ export const resolvers = {
     ...loreResolvers.Mutation,
     ...personResolvers.Mutation,
   },
+  Person: {
+    ...personResolvers.Person,
+  },
 }; 

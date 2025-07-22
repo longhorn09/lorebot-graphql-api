@@ -64,6 +64,24 @@ const escapeString = (str) => {
 };
 
 export const personResolvers = {
+  Person: {
+    // Field resolver to map ON_CHEST database column to ONCHEST GraphQL field
+    ONCHEST: (parent) => {
+      /*
+      console.log('🔍 ONCHEST field resolver called');
+      console.log('🔍 Parent object keys:', Object.keys(parent));
+      console.log('🔍 Parent.ON_CHEST value:', parent.ON_CHEST);
+      console.log('🔍 Parent.ONCHEST value:', parent.ONCHEST);
+      console.log('🔍 Parent object full:', JSON.stringify(parent, null, 2));
+      */
+      
+      // Try different ways to access the field
+      const value = parent.ON_CHEST || parent.ONCHEST || parent.on_chest || parent.onchest;
+      //console.log('🔍 Resolved value:', value);
+      
+      return value;
+    },
+  },
   Query: {
     // Cursor-based pagination (GraphQL standard)
     allPersonsConnection: async (_parent, { first = 10, after, filter, submitter }, _context, _info) => {
@@ -118,7 +136,22 @@ export const personResolvers = {
         const limit = first + 1; // Get one extra to check if there's a next page
         queryStr += ` LIMIT ${limit}`;
         
+        // Log the constructed SQL query
+        //console.log('🔍 allPersonsConnection SQL Query:', queryStr);
+        //console.log('🔍 allPersonsConnection SQL Params:', queryParams);
+        
         const results = await query(queryStr, queryParams);
+        
+        // Debug: Log the first result to see what columns are returned
+        /*
+        if (results.length > 0) {
+          console.log('🔍 First database result keys:', Object.keys(results[0]));
+          console.log('🔍 First database result ON_CHEST:', results[0].ON_CHEST);
+          console.log('🔍 First database result ONCHEST:', results[0].ONCHEST);
+          console.log('🔍 First database result full:', JSON.stringify(results[0], null, 2));
+        }
+        */
+        
         const hasNextPage = results.length > first;
         const items = hasNextPage ? results.slice(0, first) : results;
         
@@ -175,10 +208,8 @@ export const personResolvers = {
         console.log('===========================');
         */
         
-        // Build stored procedure call with parameters in the same order as Person type definition
-        // need to add ONCHEST to the backend stored procedure and table
-        //  ((input.CREATE_DATE) ? `'${escapeString(input.CREATE_DATE)}'` : null) + "," +
-        const sqlStr = "CALL CreatePerson(" +
+        // Build stored procedure call with parameters in the same order as CreatePerson_v002 stored procedure
+        const sqlStr = "CALL CreatePerson_v002(" +
           ((input.CHARNAME) ? `'${escapeString(input.CHARNAME)}'` : null) + "," +
           ((input.LIGHT) ? `'${escapeString(input.LIGHT)}'` : null) + "," +
           ((input.RING1) ? `'${escapeString(input.RING1)}'` : null) + "," +
@@ -186,7 +217,6 @@ export const personResolvers = {
           ((input.NECK1) ? `'${escapeString(input.NECK1)}'` : null) + "," +
           ((input.NECK2) ? `'${escapeString(input.NECK2)}'` : null) + "," +
           ((input.BODY) ? `'${escapeString(input.BODY)}'` : null) + "," +
-          //((input.ONCHEST) ? `'${escapeString(input.ONCHEST)}'` : null) + "," +
           ((input.HEAD) ? `'${escapeString(input.HEAD)}'` : null) + "," +
           ((input.LEGS) ? `'${escapeString(input.LEGS)}'` : null) + "," +
           ((input.FEET) ? `'${escapeString(input.FEET)}'` : null) + "," +
@@ -204,7 +234,8 @@ export const personResolvers = {
           ((input.HELD) ? `'${escapeString(input.HELD)}'` : null) + "," +
           ((input.BOTH_HANDS) ? `'${escapeString(input.BOTH_HANDS)}'` : null) + "," +
           ((input.SUBMITTER) ? `'${escapeString(input.SUBMITTER)}'` : null) + "," +        
-          ((input.CLAN_ID) ? input.CLAN_ID : null) +
+          ((input.CLAN_ID) ? input.CLAN_ID : null) + "," +
+          ((input.ONCHEST) ? `'${escapeString(input.ONCHEST)}'` : null) +
           ")";
         
         //console.log('Executing stored procedure:', sqlStr);
