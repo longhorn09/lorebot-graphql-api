@@ -1,0 +1,54 @@
+# Build and deploy to Cloud Run (uses @google-cloud/cloud-sql-connector in-app).
+# Prerequisites:
+#   - Artifact Registry repo: cloud-run-source-deploy
+#   - Runtime SA with roles/cloudsql.client
+#   - Cloud SQL Admin API enabled
+#
+# Usage:
+#   gcloud builds submit --config cloudbuild.yaml \
+#     --substitutions=_SERVICE_NAME=lorebot-graphql-api,_REGION=us-east1
+#
+# After first deploy, attach DB secrets/env on the service:
+#   DB_USER, DB_PASSWORD, DB_NAME, CLOUD_SQL_CONNECTION_NAME, CLOUD_SQL_IP_TYPE
+
+substitutions:
+  _SERVICE_NAME: lorebot-graphql-api
+  _REGION: us-east1
+
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - -t
+      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/${_SERVICE_NAME}:$SHORT_SHA
+      - .
+
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - push
+      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/${_SERVICE_NAME}:$SHORT_SHA
+
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - ${_SERVICE_NAME}
+      - --image=${_REGION}-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/${_SERVICE_NAME}:$SHORT_SHA
+      - --region=${_REGION}
+      - --platform=managed
+      - --port=8080
+      - --cpu=1
+      - --memory=512Mi
+      - --concurrency=80
+      - --min-instances=0
+      - --max-instances=10
+      - --timeout=300
+      - --allow-unauthenticated
+      - --set-env-vars=NODE_ENV=production,HOST=0.0.0.0,CLOUD_SQL_IP_TYPE=PUBLIC
+
+images:
+  - ${_REGION}-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/${_SERVICE_NAME}:$SHORT_SHA
+
+options:
+  logging: CLOUD_LOGGING_ONLY

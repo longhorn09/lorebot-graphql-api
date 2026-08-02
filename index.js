@@ -9,7 +9,7 @@ import fastify from 'fastify';
 import cors from '@fastify/cors';
 import { typeDefs, resolvers } from './schema/index.js'; // Import from new modular schema
 import { query, connectDB, closeDB } from './services/db.mjs';
-dotenv.config();
+dotenv.config({ quiet: true });
 
 async function startServer() {
   try {
@@ -26,17 +26,21 @@ async function startServer() {
       throw error;
     }
 
+    const isProduction = process.env.NODE_ENV === 'production';
+
     // Create Fastify app
+    // Cloud Run expects JSON logs; pino-pretty is for local development only.
     const app = fastify({
-      logger: {
-        level: 'error',  // Only log errors, not info/warn
-        transport: {
-          target: 'pino-pretty',
-          options: {
-            colorize: true
-          }
-        }
-      }
+      trustProxy: true,
+      logger: isProduction
+        ? { level: process.env.LOG_LEVEL || 'info' }
+        : {
+            level: process.env.LOG_LEVEL || 'error',
+            transport: {
+              target: 'pino-pretty',
+              options: { colorize: true },
+            },
+          },
     });
     
     // Register CORS plugin
@@ -45,15 +49,31 @@ async function startServer() {
       credentials: true
     });
 
-    // Health check endpoint
-    app.get('/health', async (request, reply) => {
-      console.log('🏥 Health check request received');
-      return {
-        status: 'healthy',
-        timestamp: new Date().toISOString(),
-        service: 'lorebot-graphql-api',
-        database: 'connected'
-      };
+    // Liveness for Cloud Run / load balancers (no DB hit)
+    app.get('/health', async () => ({
+      status: 'healthy',
+      timestamp: new Date().toISOString(),
+      service: 'lorebot-graphql-api',
+    }));
+
+    // Optional readiness probe that verifies the pool can serve a query
+    app.get('/ready', async (_request, reply) => {
+      try {
+        await query('SELECT 1 as test');
+        return {
+          status: 'ready',
+          timestamp: new Date().toISOString(),
+          database: 'connected',
+        };
+      } catch (error) {
+        reply.code(503);
+        return {
+          status: 'not_ready',
+          timestamp: new Date().toISOString(),
+          database: 'unavailable',
+          error: error.message,
+        };
+      }
     });
 
     // Create a new ApolloServer instance

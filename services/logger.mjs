@@ -1,4 +1,5 @@
-import 'dotenv/config';
+import dotenv from 'dotenv';
+dotenv.config({ quiet: true });
 
 // Import the official Google Cloud Logging library using ES6 syntax.
 import { Logging } from '@google-cloud/logging';

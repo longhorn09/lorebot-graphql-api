@@ -1,26 +1,36 @@
 "use strict";
-//const mysql = require('mysql2/promise');
+
 import mysql from 'mysql2/promise';
+import { Connector, IpAddressTypes } from '@google-cloud/cloud-sql-connector';
 import dotenv from 'dotenv';
-dotenv.config();
+dotenv.config({ quiet: true });
 
+let pool;
+let connector;
 
-let pool; // Declare a variable to hold the connection pool
+/**
+ * Resolve Cloud SQL IP type from env (PUBLIC | PRIVATE | PSC).
+ * Defaults to PUBLIC for simpler local/Cloud Run setups without VPC.
+ */
+function resolveIpType() {
+  const raw = (process.env.CLOUD_SQL_IP_TYPE || 'PUBLIC').toUpperCase();
+  if (raw === 'PRIVATE') return IpAddressTypes.PRIVATE;
+  if (raw === 'PSC') return IpAddressTypes.PSC;
+  return IpAddressTypes.PUBLIC;
+}
 
 /**
  * Connection pooling: https://github.com/sidorares/node-mysql2#using-connection-pools
- * @param {*} sql 
- * @param {*} params 
- * @returns 
+ * @param {*} sql
+ * @param {*} params
+ * @returns
  */
 async function query(sql, params) {
-  // Ensure we have a connection pool
   if (!pool) {
     await connectDB();
   }
-  
+
   try {
-    // Use the connection pool instead of creating individual connections
     const [results] = await pool.execute(sql, params);
     return results;
   } catch (error) {
@@ -30,81 +40,103 @@ async function query(sql, params) {
 }
 
 /**
- * Establishes and returns a connection pool to the Cloud SQL MySQL database.
- * Uses environment variables for configuration.
- * @returns {Promise<mysql.Pool>} A promise that resolves to the database connection pool object.
+ * Hybrid pool:
+ * - Cloud SQL Connector when CLOUD_SQL_CONNECTION_NAME is set (Cloud Run / GCP)
+ * - Direct TCP via DB_HOST otherwise (local development)
+ *
+ * @returns {Promise<mysql.Pool>}
  */
 async function connectDB() {
   if (pool) {
-    return pool; // Return existing pool if already created
+    return pool;
   }
 
+  const {
+    DB_USER,
+    DB_PASSWORD,
+    DB_NAME,
+    DB_HOST,
+    CLOUD_SQL_CONNECTION_NAME,
+  } = process.env;
+
+  if (!DB_USER || !DB_NAME) {
+    throw new Error('DB_USER and DB_NAME are required');
+  }
+
+  // Cloud Run instances are small; keep pool modest to avoid exhausting Cloud SQL connections.
+  const connectionLimit = Number(process.env.DB_CONNECTION_LIMIT || 5);
+
+  const baseConfig = {
+    user: DB_USER,
+    password: DB_PASSWORD,
+    database: DB_NAME,
+    waitForConnections: true,
+    connectionLimit,
+    queueLimit: 0,
+    enableKeepAlive: true,
+    keepAliveInitialDelay: 10000,
+  };
+
   try {
-    // Database connection pool configuration.
-    // IMPORTANT: Replace these placeholders with your actual Cloud SQL instance details.
-    // For production, use environment variables, Secret Manager, or IAM service accounts.
-    pool = mysql.createPool({
-      host: process.env.DB_HOST, // e.g., '127.0.0.1' for local or public IP/private IP for Cloud SQL
-      user: process.env.DB_USER,
-      password: process.env.DB_PASSWORD,
-      database: process.env.DB_NAME,
-      waitForConnections: true, // If true, the pool will queue connections if none are available
-      connectionLimit: 10,      // Increased max number of connections
-      queueLimit: 0,            // Unlimited queueing of connections
-      // Optional: For Cloud SQL connection string or Unix socket
-      // socketPath: process.env.DB_SOCKET_PATH || '/cloudsql/PROJECT_ID:REGION:INSTANCE_NAME',
-      // You might need to configure SSL/TLS for secure connections in production
-      // ssl: {
-      //   rejectUnauthorized: false // Set to true and provide CAs for production
-      // }
-    });
-    
-    // Add event listeners for pool monitoring
-    pool.on('connection', (connection) => {
-      //console.log('New database connection established');
-    });
-    
-    pool.on('acquire', (connection) => {
-      //console.log('Connection acquired from pool');
-    });
-    
-    pool.on('release', (connection) => {
-      //console.log('Connection released back to pool');
-    });
+    if (CLOUD_SQL_CONNECTION_NAME) {
+      connector = new Connector();
+      const clientOpts = await connector.getOptions({
+        instanceConnectionName: CLOUD_SQL_CONNECTION_NAME,
+        ipType: resolveIpType(),
+      });
+
+      pool = mysql.createPool({
+        ...clientOpts,
+        ...baseConfig,
+      });
+
+      console.log(
+        `Cloud SQL connector pool ready (${CLOUD_SQL_CONNECTION_NAME}, ${process.env.CLOUD_SQL_IP_TYPE || 'PUBLIC'})`
+      );
+    } else if (DB_HOST) {
+      pool = mysql.createPool({
+        ...baseConfig,
+        host: DB_HOST,
+        port: Number(process.env.DB_PORT || 3306),
+      });
+
+      console.log(`Direct TCP database pool ready (${DB_HOST})`);
+    } else {
+      throw new Error(
+        'Set CLOUD_SQL_CONNECTION_NAME (Cloud SQL connector) or DB_HOST (direct TCP)'
+      );
+    }
+
     return pool;
   } catch (error) {
     console.error('❌ Database connection pool failed:', error);
-    // In a real application, you might want to retry or handle this more gracefully.
     throw error;
   }
 }
 
 /**
- * Closes the database connection pool gracefully
+ * Closes the database connection pool and Cloud SQL connector gracefully.
  */
 async function closeDB() {
   if (pool) {
     try {
       await pool.end();
+      pool = null;
       console.log('Database connection pool closed successfully');
     } catch (error) {
       console.error('Error closing database connection pool:', error);
     }
   }
+
+  if (connector) {
+    try {
+      connector.close();
+      connector = null;
+      console.log('Cloud SQL connector closed successfully');
+    } catch (error) {
+      console.error('Error closing Cloud SQL connector:', error);
+    }
+  }
 }
 
-// Handle graceful shutdown
-process.on('SIGINT', async () => {
-  console.log('Received SIGINT, closing database connections...');
-  await closeDB();
-  process.exit(0);
-});
-
-process.on('SIGTERM', async () => {
-  console.log('Received SIGTERM, closing database connections...');
-  await closeDB();
-  process.exit(0);
-});
-
-//module.exports = {query, connectDB}
-export {query, connectDB, closeDB}
+export { query, connectDB, closeDB };
