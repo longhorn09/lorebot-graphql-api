@@ -1,195 +1,180 @@
 # lorebot-graphql-api
-Backend microservice in NodeJS using GraphQL and CloudSQL database, leveraging Fastify and ApolloServer
 
-## Project Structure
+Backend microservice in Node.js using GraphQL (Apollo Server 5 + Fastify 5) with **Neon serverless Postgres** and **Drizzle ORM**. Designed to run locally or on **Google Cloud Run**.
+
+## Stack
+
+| Layer | Technology |
+| --- | --- |
+| HTTP / GraphQL | Fastify 5, Apollo Server 5, `@as-integrations/fastify` |
+| Database | Neon serverless Postgres (`lorebot` schema) |
+| DB access | `@neondatabase/serverless` WebSocket pool, Drizzle ORM |
+| Runtime | Node.js ≥ 20, ESM (`"type": "module"`) |
+| Deploy | Docker → Artifact Registry → Cloud Run (`cloudbuild.yaml`) |
+
+Resolvers currently execute SQL through `services/db.mjs` (`query()` over the Neon pool). Drizzle owns the pool (`drizzle-orm/neon-serverless`) and table definitions in `db/schema.js`. Postgres functions such as `"CreateLore_v002"`, `"CreatePerson_v002"`, and `"GetRecent"` back write/recent paths. FlexQuery uses Postgres `~*` (case-insensitive) and `ILIKE` for MySQL CI-style search parity.
+
+## Project structure
 
 ```
 lorebot-graphql-api/
-├── index.js                  # Main application entry point - Apollo Server setup
-├── package.json              # Node.js dependencies and scripts configuration
-├── package-lock.json         # Locked dependency versions for reproducible builds
-├── LICENSE                   # Project license file
-├── README.md                 # This documentation file
-├── .gitignore                # Git ignore rules for the project
-├── schema/                   # GraphQL schema definitions and resolvers
-│   ├── index.js              # Main schema file that combines all type definitions
+├── index.js                  # Apollo + Fastify entry; /graphql, /health, /ready
+├── package.json
+├── Dockerfile                # Cloud Run image
+├── cloudbuild.yaml           # Build & deploy to Cloud Run
+├── .env.template             # Required environment variables
+├── db/
+│   └── schema.js             # Drizzle table definitions (lorebot.lore / lorebot.person)
+├── schema/
+│   ├── index.js              # Combines typeDefs + resolvers
 │   ├── types/                # GraphQL type definitions
-│   │   ├── index.js          # Exports all type definitions
-│   │   ├── common.js         # Common GraphQL types (PageInfo, etc.)
-│   │   ├── lore.js           # Lore entity type definitions and queries
-│   │   ├── person.js         # Person entity type definitions and queries
-│   │   └── recent.js         # Recent entity type definitions and queries
-│   └── resolvers/            # GraphQL resolver implementations
-│       ├── index.js          # Exports all resolvers
-│       ├── lore.js           # Lore entity resolvers (queries and mutations)
-│       ├── person.js         # Person entity resolvers (queries and mutations)
-│       └── recent.js         # Recent entity resolvers (queries and mutations)
-├── services/                 # Business logic and external service integrations
-│   ├── db.mjs                # Database connection and query utilities
-│   └── logger.mjs            # Logging service for application events
-└── constants/                # Application constants and configuration
-    └── index.js              # Centralized constants and configuration values
+│   └── resolvers/            # Query/mutation resolvers
+├── services/
+│   ├── db.mjs                # Neon pool, Drizzle client, query helper
+│   ├── logger.mjs            # Optional GCP Logging wrapper (not wired into app yet)
+│   └── logger-throttle.mjs   # Optional throttled logger (not wired into app yet)
+├── constants/
+│   └── index.js
+└── sql/
+    ├── mysql/                # Legacy MySQL reference (docs/AI only; not used at runtime)
+    └── postgres/             # Neon-compatible Postgres reference + DIFFS.md vs live Neon
 ```
 
-### File Descriptions
+### Notable files
 
-- **`index.js`**: Main application entry point that sets up the Apollo GraphQL server, configures middleware, and starts the HTTP server
-- **`package.json`**: Defines project metadata, dependencies, and npm scripts for development and deployment
-- **`schema/index.js`**: Combines all GraphQL type definitions and resolvers into a single schema
-- **`schema/types/`**: Contains GraphQL type definitions organized by entity
-  - **`common.js`**: Shared GraphQL types like PageInfo for pagination
-  - **`lore.js`**: Lore entity types, queries, and mutations
-  - **`person.js`**: Person entity types, queries, and mutations
-  - **`recent.js`**: Recent entity types, queries, and mutations
-- **`schema/resolvers/`**: Contains the resolver implementations that handle GraphQL operations
-  - **`lore.js`**: Implements all Lore-related queries and mutations with database operations
-  - **`person.js`**: Implements all Person-related queries and mutations with database operations
-  - **`recent.js`**: Implements all Recent-related queries and mutations with database operations
-- **`services/`**: Business logic and external service integrations
-  - **`db.mjs`**: Database service layer providing connection management and query utilities for CloudSQL
-  - **`logger.mjs`**: Logging service for application events and debugging
-- **`constants/index.js`**: Centralized constants and configuration values used throughout the application
+- **`index.js`** — Starts Fastify + Apollo, connects to Neon, exposes `/graphql`, `/health`, `/ready`
+- **`services/db.mjs`** — Neon WebSocket pool, `search_path` to `lorebot`, `?` → `$n` placeholders, row-key mapping for GraphQL
+- **`db/schema.js`** — Drizzle schema for `lore` and `person`
+- **`schema/resolvers/lore.js`** — `allLorePaginated`, `FlexQuery`, `addOrUpdateLore`
+- **`schema/resolvers/person.js`** — `allPersonsConnection`, `allPersons`, `addOrUpdatePerson`
+- **`schema/resolvers/recent.js`** — `recent` via `"GetRecent"()`
 
 ## Architecture
-
-The lorebot-graphql-api follows a layered architecture pattern with clear separation of concerns:
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                    External Clients                         │
-│  • Discord bot front-end w/Discordjs v14                    │
-│  • Discord slash commands with ephemeral interaction        │
-│  • Parsing user messages to construct GraphQL input query   │
+│  • Discord bot (discord.js)                                 │
+│  • Slash commands / ephemeral interactions                  │
+│  • GraphQL queries constructed from user input              │
+└─────────────────────┬───────────────────────────────────────┘
+                      │ HTTPS
+                      ▼
+┌─────────────────────────────────────────────────────────────┐
+│              Cloud Run (this service)                       │
 │  • Fastify HTTP server                                      │
+│  • Apollo GraphQL at /graphql                               │
+│  • Liveness /health, readiness /ready                       │
 └─────────────────────┬───────────────────────────────────────┘
-                      │ HTTP/HTTPS
+                      │ GraphQL resolvers
                       ▼
 ┌─────────────────────────────────────────────────────────────┐
-│                    Apollo GraphQL Server                    │
-│  • Fastify HTTP server                                      │
-│  • GraphQL endpoint (/graphql)                              │
-│  • Request/response handling                                │
-│  • Authentication & authorization                           │
+│              Database access layer                          │
+│  • @neondatabase/serverless Pool (WebSockets)               │
+│  • drizzle-orm (neon-serverless)                            │
+│  • Parameterized SQL + Postgres functions                   │
 └─────────────────────┬───────────────────────────────────────┘
-                      │ GraphQL Operations
+                      │ DATABASE_URL (pooled)
                       ▼
 ┌─────────────────────────────────────────────────────────────┐
-│                    GraphQL Schema Layer                     │
-│  • Type definitions (Lore, Person, etc.)                    │
-│  • Query & Mutation schemas                                 │
-│  • Input validation                                         │
-│  • Resolver implementations                                 │
-└─────────────────────┬───────────────────────────────────────┘
-                      │ Database Queries
-                      ▼
-┌─────────────────────────────────────────────────────────────┐
-│                    Database Service Layer                   │
-│  • Connection pooling                                       │
-│  • Query execution                                          │
-│  • Transaction management                                   │
-│  • Error handling                                           │
-└─────────────────────┬───────────────────────────────────────┘
-                      │ CloudSQL Connection
-                      ▼
-┌─────────────────────────────────────────────────────────────┐
-│                    Google Cloud SQL                         │
-│  • MySQL Database                                           │
-│  • Managed service                                          │
-│  • Automatic backups                                        │
-│  • High availability                                        │
+│              Neon serverless Postgres                       │
+│  • Schema: lorebot                                          │
+│  • Tables: lore, person                                     │
+│  • Functions: CreateLore_v002, CreatePerson_v002, GetRecent │
 └─────────────────────────────────────────────────────────────┘
 ```
 
-### Architecture Components
+### Data flow
 
-**1. Apollo GraphQL Server**
-- Built on Fastify for HTTP handling
-- Provides GraphQL endpoint at `/graphql`
-- Handles CORS, authentication, and request routing
-- Supports introspection and GraphQL Playground
+1. Client sends a GraphQL operation to `/graphql`
+2. Apollo validates and routes to a resolver
+3. Resolver queries Neon via `services/db.mjs` (pool + Drizzle)
+4. Rows are mapped to GraphQL field names and returned
 
-**2. GraphQL Schema Layer**
-- Defines the API contract with type definitions
-- Implements resolvers for queries and mutations
-- Provides pagination support with cursor-based navigation
-- Handles input validation and error responses
+## Setup
 
-**3. Database Service Layer**
-- Manages CloudSQL connections using `@google-cloud/cloud-sql-connector`
-- Implements connection pooling for performance
-- Provides query utilities and transaction support
-- Handles database-specific error scenarios
+### Prerequisites
 
-**4. Google Cloud SQL**
-- Managed MySQL database service
-- Automatic scaling and maintenance
-- Built-in security and compliance features
-- Integration with Google Cloud IAM for access control
+- Node.js 20+
+- A Neon project with the `lorebot` schema (tables + functions already migrated)
+- Pooled connection string from the Neon console
 
-### Data Flow
+### Install
 
-1. **Client Request**: External clients send GraphQL queries/mutations via HTTP
-2. **Apollo Server**: Receives and parses GraphQL operations
-3. **Schema Resolution**: GraphQL schema routes operations to appropriate resolvers
-4. **Database Query**: Resolvers execute database queries through the service layer
-5. **Response**: Results are formatted and returned to the client
-
-## Dependencies
-
-Dependencies will be automatically installed with `npm install` but to install discretely run following
-```
-npm install @apollo/server @google-cloud/cloud-sql-connector dotenv graphql graphql-tag mysql2 fastify
+```bash
+npm install
 ```
 
-## CloudSQL API enablement
-Run following in Cloud Shell to enable requisite APIs
-```
-gcloud services enable compute.googleapis.com sqladmin.googleapis.com \
-  run.googleapis.com artifactregistry.googleapis.com \
-  cloudbuild.googleapis.com servicenetworking.googleapis.com
-```
+Core packages (also pulled in by `npm install`):
 
-## GCP specific setup
-Replace ${GOOGLE_CLOUD_PROJECT} with name of your project
+```bash
+npm install @apollo/server @as-integrations/fastify fastify @fastify/cors \
+  graphql graphql-tag dotenv \
+  @neondatabase/serverless drizzle-orm ws bufferutil
 
-### Common error(s)
-If receiving a `NO_ADC_FOUND` error, need to setup the application default credentials `ADC`
-```
-echo $GOOGLE_APPLICATION_CREDENTIALS
-gcloud init --console-only
-gcloud auth application-default login --no-browser
+npm install -D drizzle-kit
 ```
 
-### Service account creation and policy setup
+### Environment
+
+Copy `.env.template` to `.env` and set at least:
+
+```bash
+DATABASE_URL=postgresql://USER:PASSWORD@HOST/neondb?sslmode=require
+DB_SCHEMA=lorebot
+DB_CONNECTION_LIMIT=5
+PORT=4000
+HOST=0.0.0.0
+NODE_ENV=development
 ```
-gcloud iam service-accounts create lorebot_service_account_name_here \
-	--display-name "Lorebot service account"
 
-gcloud projects add-iam-policy-binding ${GOOGLE_CLOUD_PROJECT} \
-  --member="serviceAccount:quickstart-service-account@${GOOGLE_CLOUD_PROJECT}.iam.gserviceaccount.com" \
-  --role="roles/cloudsql.client"
+Use Neon’s **pooled** connection string for local and Cloud Run. Do not commit `.env`.
 
-gcloud projects add-iam-policy-binding ${GOOGLE_CLOUD_PROJECT} \
-  --member="serviceAccount:quickstart-service-account@${GOOGLE_CLOUD_PROJECT}.iam.gserviceaccount.com" \
-  --role="roles/cloudsql.instanceUser"
+### Run locally
 
-gcloud projects add-iam-policy-binding ${GOOGLE_CLOUD_PROJECT} \
-  --member="serviceAccount:quickstart-service-account@${GOOGLE_CLOUD_PROJECT}.iam.gserviceaccount.com" \
-  --role="roles/logging.logWriter"
-  ```
-
-### Database service account user setup
+```bash
+npm start
+# or
+npm run start:prod
 ```
-gcloud sql users create quickstart-service-account@${GOOGLE_CLOUD_PROJECT}.iam.gserviceaccount.com --instance=database_instance_here --type=cloud_iam_service_account
+
+- GraphQL: `http://localhost:4000/graphql`
+- Health: `http://localhost:4000/health`
+- Ready (DB check): `http://localhost:4000/ready`
+
+## Cloud Run deployment
+
+The service listens on `PORT` (Cloud Run default `8080`) and `HOST=0.0.0.0`.
+
+1. Store `DATABASE_URL` in Secret Manager (recommended).
+2. Build/deploy with Cloud Build:
+
+```bash
+gcloud builds submit --config cloudbuild.yaml \
+  --substitutions=_SERVICE_NAME=lorebot-graphql-api,_REGION=us-east1
 ```
-  
+
+3. Attach the secret to the Cloud Run service, e.g. `DATABASE_URL=DATABASE_URL:latest`, and set `DB_SCHEMA=lorebot`, `NODE_ENV=production`.
+
+Optional GCP APIs if deploying from this repo’s Cloud Build pipeline:
+
+```bash
+gcloud services enable run.googleapis.com artifactregistry.googleapis.com \
+  cloudbuild.googleapis.com secretmanager.googleapis.com
+```
+
+Application Default Credentials / Cloud SQL IAM setup from the previous MySQL stack are **not** required for Neon.
+
 ## GraphQL example queries
 
-### First page
-```
+### Paginated lore search (`allLorePaginated`)
+
+```graphql
 query {
-  allLoreConnection(
+  allLorePaginated(
     first: 5
+    searchToken: "robe"
+    submitter: "discord-user"
   ) {
     edges {
       node {
@@ -209,12 +194,15 @@ query {
 }
 ```
 
-### Second page
-```
+### Next page
+
+```graphql
 query {
-  allLoreConnection(
+  allLorePaginated(
     first: 5
     after: "NQ=="
+    searchToken: "robe"
+    submitter: "discord-user"
   ) {
     edges {
       node {
@@ -225,11 +213,45 @@ query {
     }
     pageInfo {
       hasNextPage
-      hasPreviousPage
-      startCursor
       endCursor
     }
     totalCount
+  }
+}
+```
+
+### FlexQuery (criteria string; affects uses case-insensitive regex)
+
+```graphql
+query {
+  FlexQuery(
+    first: 5
+    requestor: "discord-user"
+    flexCriteria: "affects=DAMROLL by 1&weight>=5"
+  ) {
+    edges {
+      node {
+        LORE_ID
+        OBJECT_NAME
+        AFFECTS
+        WEIGHT
+      }
+      cursor
+    }
+    totalCount
+  }
+}
+```
+
+### Recent
+
+```graphql
+query {
+  recent(DISCORD_USER: "discord-user") {
+    TBL_SRC
+    DESCRIPTION
+    CREATE_DATE
+    submitter
   }
 }
 ```

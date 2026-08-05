@@ -108,7 +108,7 @@ const buildWhereClause = (filters) => {
   const params = [];
   
   if (filters.OBJECT_NAME) {
-    conditions.push('OBJECT_NAME LIKE ?');
+    conditions.push('OBJECT_NAME ILIKE ?');
     params.push(`%${filters.OBJECT_NAME}%`);
   }
   
@@ -123,7 +123,7 @@ const buildWhereClause = (filters) => {
   }
   
   if (filters.SUBMITTER) {
-    conditions.push('SUBMITTER LIKE ?');
+    conditions.push('SUBMITTER ILIKE ?');
     params.push(`%${filters.SUBMITTER}%`);
   }
   
@@ -166,9 +166,9 @@ const buildConditionsFromFlexCriteria = (flexCriteria) => {
       const operator = patternRegex.exec(trimmedPair)[2].toString();
       const value = patternRegex.exec(trimmedPair)[3].toString().trim();
       
-      // Handle special case for 'value' field
+      // Handle special case for 'value' field (varchar in DB; cast for numeric ops)
       if (fieldName == 'value' || fieldName == 'item_value' || fieldName == 'item value') {
-        conditions.push('ITEM_VALUE ' + operator + ' ?');
+        conditions.push(`NULLIF(ITEM_VALUE, '')::numeric ${operator} ?`);
       } 
       else if (fieldName != 'affects') {
         conditions.push(fieldName.toUpperCase() + ' ' + operator + ' ?');
@@ -193,7 +193,7 @@ const buildConditionsFromFlexCriteria = (flexCriteria) => {
           params.push(parseInt(value));
           break;
           
-        // String fields that should use LIKE with wildcards
+        // String fields that should use ILIKE with wildcards (MySQL CI collation parity)
         case "item_type":
         case "item_is":
         case "submitter":
@@ -205,7 +205,7 @@ const buildConditionsFromFlexCriteria = (flexCriteria) => {
         case "effects":
         case "damage":
         case "can_use":
-          conditions[conditions.length - 1] = fieldName.toUpperCase() + ' LIKE ?';
+          conditions[conditions.length - 1] = fieldName.toUpperCase() + ' ILIKE ?';
           params.push(`%${value}%`);
           break;
         case "affects":
@@ -217,43 +217,30 @@ const buildConditionsFromFlexCriteria = (flexCriteria) => {
           //     casting level by 2
           //     HEALTH by 5
           
-          // Remove the general condition that was added above and replace with specific affects processing
-          // no longer needed due to row ~173 
-          //conditions.pop(); // Remove the general AFFECTS = ? condition
-          //params.pop();     // Remove the corresponding parameter
-          
           affectsArr = value.split(",");        // singular or multiple affects
-          //console.log(`affectsArr.length:`, affectsArr.length);
           
           for (let i = 0; i < affectsArr.length; i++) {
             half1 = null, half2 = null, match = null;   
-            //console.log(`affectsArr[${i}]:`, affectsArr[i]);
             if (affectsArr[i].trim().indexOf(' by ') > 0) { 
               if (/^([A-Za-z_\s]+)\s+by\s+([+-]?\d+(?:[A-Za-z_\s\d]+)?)$/.test( affectsArr[i].trim())) {
                 match = /^([A-Za-z_\s]+)\s+by\s+([+-]?\d+(?:[A-Za-z_\s\d]+)?)$/.exec(affectsArr[i].trim());
                 if (match != null && match.length === 3) {      // think matching index [0,1,2] -> length = 3
                   half1 = match[1].trim();
                   var temphalf2 = match[2].trim();
+                  // Optional '+' before the number; Postgres ~* is case-insensitive (MySQL CI parity)
                   half2 = temphalf2.replace(/\+/g, '\\+?'); 
                   
-                  //console.log(`matched: ${half1} ${half2}`);
-                  if (i === 0){
-                    conditions.push(`REGEXP_LIKE(Lore.${fieldName.toUpperCase()}, ?)`);
-                    params.push(`.*${half1}\\s+by\\s+${half2}.*`);    // don't use ^ or $ because affects may contain multiple separated by commas  
-                  }
-                  else {
-                    conditions.push(`REGEXP_LIKE(Lore.${fieldName.toUpperCase()}, ?)`);
-                    params.push(`.*${half1}\\s+by\\s+${half2}.*`);    // don't use ^ or $ because affects may contain multiple separated by commas
-                  }
+                  conditions.push(`${fieldName.toUpperCase()} ~* ?`);
+                  // Substring match across comma-separated affects list
+                  params.push(`${half1}\\s+by\\s+${half2}`);
                 }
               } // end of regex test
             } // end of testing for ' by '
             else {      // ie. /query affects=skill shield block           <=== no ' by '
-              conditions.push(`Lore.${fieldName.toUpperCase()} LIKE ?`);
+              conditions.push(`${fieldName.toUpperCase()} ILIKE ?`);
               params.push(`%${affectsArr[i].trim()}%`);
             }
           }
-          //affectsArr.push(value);
           break;
         default:
           params.push(value);
@@ -284,8 +271,14 @@ export const loreResolvers = {
           ?.find(selection => selection.name.value === 'node')
           ?.selectionSet?.selections?.map(selection => selection.name.value) || [];
         
-        // Build dynamic SELECT statement
-        const selectFields = requestedFields.length > 0 ? requestedFields.join(', ') : '*';
+        // Build dynamic SELECT statement (always include LORE_ID for cursors)
+        const selectFieldSet = new Set(
+          requestedFields.length > 0 ? requestedFields : ['*']
+        );
+        if (!selectFieldSet.has('*')) {
+          selectFieldSet.add('LORE_ID');
+        }
+        const selectFields = [...selectFieldSet].join(', ');
         let queryStr = `SELECT ${selectFields} FROM Lore`;
         let queryParams = [];
         
@@ -306,22 +299,7 @@ export const loreResolvers = {
             // Search across multiple fields with tokenization
             tokens.forEach(token => {
               const fieldConditions = [
-                'OBJECT_NAME LIKE ?'
-                /*,
-                'LOWER(ITEM_TYPE) LIKE ?',
-                'LOWER(ITEM_IS) LIKE ?',
-                'LOWER(SUBMITTER) LIKE ?',
-                'LOWER(AFFECTS) LIKE ?',
-                'LOWER(RESTRICTS) LIKE ?',
-                'LOWER(CLASS) LIKE ?',
-                'LOWER(MAT_CLASS) LIKE ?',
-                'LOWER(MATERIAL) LIKE ?',
-                'LOWER(ITEM_VALUE) LIKE ?',
-                'LOWER(EXTRA) LIKE ?',
-                'LOWER(IMMUNE) LIKE ?',
-                'LOWER(EFFECTS) LIKE ?',
-                'LOWER(ITEM_LEVEL) LIKE ?',
-                'LOWER(DAMAGE) LIKE ?'*/
+                'OBJECT_NAME ILIKE ?'
               ];
               
               // Add the token parameter for each field
@@ -366,7 +344,7 @@ export const loreResolvers = {
             
             tokens.forEach(token => {
               const fieldConditions = [
-                'OBJECT_NAME LIKE ?'
+                'OBJECT_NAME ILIKE ?'
               ];
               
               fieldConditions.forEach(() => {
@@ -384,7 +362,7 @@ export const loreResolvers = {
           ? `SELECT COUNT(*) as total FROM Lore WHERE ${searchConditions.join(' AND ')}`
           : 'SELECT COUNT(*) as total FROM Lore';
         const countResult = await query(countQueryStr, searchParams);   // <== query execution here
-        const totalCount = countResult[0].total;
+        const totalCount = Number(countResult[0].TOTAL ?? countResult[0].total ?? 0);
         
         // Add ordering and limit
         const limit = first + 1; // Get one extra to check if there's a next page
@@ -442,8 +420,14 @@ export const loreResolvers = {
           ?.find(selection => selection.name.value === 'node')
           ?.selectionSet?.selections?.map(selection => selection.name.value) || [];
         
-        // Build dynamic SELECT statement
-        const selectFields = requestedFields.length > 0 ? requestedFields.join(', ') : '*';
+        // Build dynamic SELECT statement (always include LORE_ID for cursors)
+        const selectFieldSet = new Set(
+          requestedFields.length > 0 ? requestedFields : ['*']
+        );
+        if (!selectFieldSet.has('*')) {
+          selectFieldSet.add('LORE_ID');
+        }
+        const selectFields = [...selectFieldSet].join(', ');
         let queryStr = `SELECT ${selectFields} FROM Lore`;
         let queryParams = [];
         
@@ -496,7 +480,7 @@ export const loreResolvers = {
         */
         // ##### BEGIN COUNT(*) QUERY EXECUTION ######################
         const countResult = await query(countQueryStr, countParams);        
-        const totalCount = countResult[0].total;
+        const totalCount = Number(countResult[0].TOTAL ?? countResult[0].total ?? 0);
         
         // ##### END COUNT(*) QUERY EXECUTION ########################
         
@@ -550,43 +534,47 @@ export const loreResolvers = {
     addOrUpdateLore: async (_parent, { input }, _context, _info) => {
       try {
         const { OBJECT_NAME, ...loreData } = input;
+        const weapClass = loreData.CLASS ?? loreData.WEAP_CLASS ?? null;
+
+        // Neon Postgres function (ported from MySQL CreateLore_v002); returns void
+        await query(
+          `SELECT "CreateLore_v002"(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            OBJECT_NAME ?? null,
+            loreData.ITEM_TYPE ?? null,
+            loreData.ITEM_IS ?? null,
+            loreData.SUBMITTER ?? null,
+            loreData.AFFECTS ?? null,
+            loreData.APPLY ?? null,
+            loreData.RESTRICTS ?? null,
+            weapClass,
+            loreData.MAT_CLASS ?? null,
+            loreData.MATERIAL ?? null,
+            loreData.ITEM_VALUE ?? null,
+            loreData.EXTRA ?? null,
+            loreData.IMMUNE ?? null,
+            loreData.EFFECTS ?? null,
+            loreData.WEIGHT ?? null,
+            loreData.CAPACITY ?? null,
+            loreData.ITEM_LEVEL ?? null,
+            loreData.CONTAINER_SIZE ?? null,
+            loreData.CHARGES ?? null,
+            loreData.SPEED ?? null,
+            loreData.ACCURACY ?? null,
+            loreData.POWER ?? null,
+            loreData.DAMAGE ?? null,
+            loreData.CAN_USE ?? null,
+          ]
+        );
+
+        const rows = await query(
+          `SELECT LORE_ID FROM Lore WHERE OBJECT_NAME = ? LIMIT 1`,
+          [OBJECT_NAME]
+        );
         
-       // console.log('loreData:', loreData);
-        // Build stored procedure call with parameters in the same order as the example
-        const sqlStr = "CALL CreateLore_v002(" +
-          ((OBJECT_NAME) ? `'${OBJECT_NAME.replace("'","\\'")}'` : null) + "," +
-          ((loreData.ITEM_TYPE) ? `'${loreData.ITEM_TYPE}'` : null) + "," +
-          ((loreData.ITEM_IS) ? `'${loreData.ITEM_IS}'` : null) + "," +
-          ((loreData.SUBMITTER) ? `'${loreData.SUBMITTER}'` : null) + "," +
-          ((loreData.AFFECTS) ? `'${loreData.AFFECTS}'` : null) + "," +
-          ((loreData.APPLY) ? loreData.APPLY : null) + "," +
-          ((loreData.RESTRICTS) ? `'${loreData.RESTRICTS}'` : null) + "," +
-          ((loreData.WEAP_CLASS) ? `'${loreData.WEAP_CLASS}'` : null) + "," +
-          ((loreData.MAT_CLASS) ? `'${loreData.MAT_CLASS}'` : null) + "," +
-          ((loreData.MATERIAL) ? `'${loreData.MATERIAL}'` : null) + "," +
-          ((loreData.ITEM_VALUE) ? `'${loreData.ITEM_VALUE}'` : null) + "," +
-          ((loreData.EXTRA) ? `'${loreData.EXTRA}'` : null) + "," +
-          ((loreData.IMMUNE) ? `'${loreData.IMMUNE}'` : null) + "," +
-          ((loreData.EFFECTS) ? `'${loreData.EFFECTS}'` : null) + "," +
-          ((loreData.WEIGHT) ? loreData.WEIGHT : null) + "," +
-          ((loreData.CAPACITY) ? loreData.CAPACITY : null) + "," +
-          ((loreData.ITEM_LEVEL) ? `'${loreData.ITEM_LEVEL}'` : null) + "," +
-          ((loreData.CONTAINER_SIZE) ? loreData.CONTAINER_SIZE : null) + "," +
-          ((loreData.CHARGES) ? loreData.CHARGES : null) + "," +
-          ((loreData.SPEED) ? loreData.SPEED : null) + "," +
-          ((loreData.ACCURACY) ? loreData.ACCURACY : null) + "," +
-          ((loreData.POWER) ? loreData.POWER : null) + "," +
-          ((loreData.DAMAGE) ? `'${loreData.DAMAGE}'` : null) + "," +
-          ((loreData.CAN_USE) ? `'${loreData.CAN_USE}'` : null) + ")" ;  
-          
-        // Execute the stored procedure
-        const result = await query(sqlStr, []);
-        
-        // log after execution of stored proc
         console.log(`${moment().format(MYSQL_DATETIME_FORMAT)} : ${loreData.SUBMITTER.padEnd(30)} insert/update '${OBJECT_NAME}'` );
         
-        // Return the lore data (the stored procedure should return the created/updated lore)
-        return { ...input, LORE_ID: result.insertId || result[0]?.LORE_ID };
+        return { ...input, LORE_ID: rows[0]?.LORE_ID ?? null };
         
       } catch (error) {
         console.error('Error in addOrUpdateLore:', error);

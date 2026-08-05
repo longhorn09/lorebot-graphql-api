@@ -13,9 +13,9 @@ dotenv.config({ quiet: true });
 
 async function startServer() {
   try {
-    // Connect to the database
+    // Connect to Neon Postgres
     const dbConnection = await connectDB();
-    console.log('Successfully connected to Cloud SQL (MySQL)!');
+    console.log('Successfully connected to Neon Postgres!');
     
     // Test the connection
     try {

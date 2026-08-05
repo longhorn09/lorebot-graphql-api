@@ -57,12 +57,6 @@ const buildWhereClause = (filters) => {
   };
 };
 
-// Helper function to escape single quotes in strings
-const escapeString = (str) => {
-  if (!str) return null;
-  return str.replace(/'/g, "\\'");
-};
-
 export const personResolvers = {
   Person: {
     // Field resolver to map ON_CHEST database column to ONCHEST GraphQL field
@@ -98,7 +92,7 @@ export const personResolvers = {
         // Get total count
         const countResult = await query(`SELECT COUNT(*) as total FROM Person ${whereClause}`, params);
         
-        const totalCount = countResult[0].total;
+        const totalCount = Number(countResult[0].TOTAL ?? countResult[0].total ?? 0);
         
         // Build query with cursor pagination
         let queryStr = `SELECT * FROM Person`;
@@ -208,44 +202,46 @@ export const personResolvers = {
         console.log('===========================');
         */
         
-        // Build stored procedure call with parameters in the same order as CreatePerson_v002 stored procedure
-        const sqlStr = "CALL CreatePerson_v002(" +
-          ((input.CHARNAME) ? `'${escapeString(input.CHARNAME)}'` : null) + "," +
-          ((input.LIGHT) ? `'${escapeString(input.LIGHT)}'` : null) + "," +
-          ((input.RING1) ? `'${escapeString(input.RING1)}'` : null) + "," +
-          ((input.RING2) ? `'${escapeString(input.RING2)}'` : null) + "," +
-          ((input.NECK1) ? `'${escapeString(input.NECK1)}'` : null) + "," +
-          ((input.NECK2) ? `'${escapeString(input.NECK2)}'` : null) + "," +
-          ((input.BODY) ? `'${escapeString(input.BODY)}'` : null) + "," +
-          ((input.HEAD) ? `'${escapeString(input.HEAD)}'` : null) + "," +
-          ((input.LEGS) ? `'${escapeString(input.LEGS)}'` : null) + "," +
-          ((input.FEET) ? `'${escapeString(input.FEET)}'` : null) + "," +
-          ((input.ARMS) ? `'${escapeString(input.ARMS)}'` : null) + "," +
-          ((input.SLUNG) ? `'${escapeString(input.SLUNG)}'` : null) + "," +
-          ((input.HANDS) ? `'${escapeString(input.HANDS)}'` : null) + "," +
-          ((input.SHIELD) ? `'${escapeString(input.SHIELD)}'` : null) + "," +
-          ((input.ABOUT) ? `'${escapeString(input.ABOUT)}'` : null) + "," +
-          ((input.WAIST) ? `'${escapeString(input.WAIST)}'` : null) + "," +
-          ((input.POUCH) ? `'${escapeString(input.POUCH)}'` : null) + "," +
-          ((input.RWRIST) ? `'${escapeString(input.RWRIST)}'` : null) + "," +
-          ((input.LWRIST) ? `'${escapeString(input.LWRIST)}'` : null) + "," +
-          ((input.PRIMARY_WEAP) ? `'${escapeString(input.PRIMARY_WEAP)}'` : null) + "," +
-          ((input.SECONDARY_WEAP) ? `'${escapeString(input.SECONDARY_WEAP)}'` : null) + "," +
-          ((input.HELD) ? `'${escapeString(input.HELD)}'` : null) + "," +
-          ((input.BOTH_HANDS) ? `'${escapeString(input.BOTH_HANDS)}'` : null) + "," +
-          ((input.SUBMITTER) ? `'${escapeString(input.SUBMITTER)}'` : null) + "," +        
-          ((input.CLAN_ID) ? input.CLAN_ID : null) + "," +
-          ((input.ONCHEST) ? `'${escapeString(input.ONCHEST)}'` : null) +
-          ")";
-        
-        //console.log('Executing stored procedure:', sqlStr);
-        
-        // Execute the stored procedure
-        const result = await query(sqlStr, []);
+        // Neon Postgres function (ported from MySQL CreatePerson_v002); returns void
+        await query(
+          `SELECT "CreatePerson_v002"(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            input.CHARNAME ?? null,
+            input.LIGHT ?? null,
+            input.RING1 ?? null,
+            input.RING2 ?? null,
+            input.NECK1 ?? null,
+            input.NECK2 ?? null,
+            input.BODY ?? null,
+            input.HEAD ?? null,
+            input.LEGS ?? null,
+            input.FEET ?? null,
+            input.ARMS ?? null,
+            input.SLUNG ?? null,
+            input.HANDS ?? null,
+            input.SHIELD ?? null,
+            input.ABOUT ?? null,
+            input.WAIST ?? null,
+            input.POUCH ?? null,
+            input.RWRIST ?? null,
+            input.LWRIST ?? null,
+            input.PRIMARY_WEAP ?? null,
+            input.SECONDARY_WEAP ?? null,
+            input.HELD ?? null,
+            input.BOTH_HANDS ?? null,
+            input.SUBMITTER ?? null,
+            input.CLAN_ID ?? null,
+            input.ONCHEST ?? null,
+          ]
+        );
+
+        const rows = await query(
+          `SELECT PERSON_ID FROM Person WHERE CHARNAME = ? LIMIT 1`,
+          [input.CHARNAME]
+        );
         console.log(`${moment().format(MYSQL_DATETIME_FORMAT)} : ${input.SUBMITTER.padEnd(30)} /who ${input.CHARNAME}`);
         
-        // Return the person data (the stored procedure should return the created/updated person)
-        return { ...input, PERSON_ID: result.insertId || result[0]?.PERSON_ID };
+        return { ...input, PERSON_ID: rows[0]?.PERSON_ID ?? null };
         
       } catch (error) {
         console.error('Error in addOrUpdatePerson:', error);

@@ -1,38 +1,90 @@
 "use strict";
 
-import mysql from 'mysql2/promise';
-import { Connector, IpAddressTypes } from '@google-cloud/cloud-sql-connector';
+import { Pool, neonConfig } from '@neondatabase/serverless';
+import { drizzle } from 'drizzle-orm/neon-serverless';
+import ws from 'ws';
 import dotenv from 'dotenv';
+
 dotenv.config({ quiet: true });
 
+// Required for Node / Cloud Run WebSocket connections to Neon.
+neonConfig.webSocketConstructor = ws;
+
 let pool;
-let connector;
+let db;
 
 /**
- * Resolve Cloud SQL IP type from env (PUBLIC | PRIVATE | PSC).
- * Defaults to PUBLIC for simpler local/Cloud Run setups without VPC.
+ * Convert mysql2-style `?` placeholders to Postgres `$1`, `$2`, ...
+ * @param {string} sql
+ * @returns {string}
  */
-function resolveIpType() {
-  const raw = (process.env.CLOUD_SQL_IP_TYPE || 'PUBLIC').toUpperCase();
-  if (raw === 'PRIVATE') return IpAddressTypes.PRIVATE;
-  if (raw === 'PSC') return IpAddressTypes.PSC;
-  return IpAddressTypes.PUBLIC;
+function toPgPlaceholders(sql) {
+  let index = 0;
+  return sql.replace(/\?/g, () => `$${++index}`);
+}
+
+const INT_FIELD_KEYS = new Set([
+  'LORE_ID',
+  'PERSON_ID',
+  'APPLY',
+  'WEIGHT',
+  'CAPACITY',
+  'CONTAINER_SIZE',
+  'CHARGES',
+  'SPEED',
+  'ACCURACY',
+  'POWER',
+  'CLAN_ID',
+  'TOTAL',
+  'TEST',
+]);
+
+/**
+ * Map Postgres row keys to GraphQL-friendly shapes:
+ * - lowercase columns (lore_id) → LORE_ID
+ * - already-quoted mixed-case aliases (TBL_SRC) preserved
+ * - Recent.submitter stays lowercase for the GraphQL schema
+ * - bigint/numeric strings coerced for GraphQL Int fields
+ * @param {Record<string, unknown>} row
+ */
+function mapRowKeys(row) {
+  if (!row || typeof row !== 'object' || Array.isArray(row)) {
+    return row;
+  }
+
+  const mapped = {};
+  for (const [key, value] of Object.entries(row)) {
+    const mappedKey = key === 'submitter' || /[A-Z]/.test(key) ? key : key.toUpperCase();
+    let mappedValue = value;
+
+    if (
+      typeof value === 'string' &&
+      /^-?\d+$/.test(value) &&
+      INT_FIELD_KEYS.has(mappedKey)
+    ) {
+      mappedValue = Number(value);
+    }
+
+    mapped[mappedKey] = mappedValue;
+  }
+  return mapped;
 }
 
 /**
- * Connection pooling: https://github.com/sidorares/node-mysql2#using-connection-pools
- * @param {*} sql
- * @param {*} params
- * @returns
+ * Execute a parameterized query. Accepts mysql-style `?` placeholders.
+ * Returns an array of row objects (GraphQL-cased keys).
+ * @param {string} sql
+ * @param {unknown[]} [params]
  */
-async function query(sql, params) {
+async function query(sql, params = []) {
   if (!pool) {
     await connectDB();
   }
 
   try {
-    const [results] = await pool.execute(sql, params);
-    return results;
+    const text = toPgPlaceholders(sql);
+    const result = await pool.query(text, params);
+    return (result.rows || []).map(mapRowKeys);
   } catch (error) {
     console.error('Database query error:', error);
     throw error;
@@ -40,103 +92,65 @@ async function query(sql, params) {
 }
 
 /**
- * Hybrid pool:
- * - Cloud SQL Connector when CLOUD_SQL_CONNECTION_NAME is set (Cloud Run / GCP)
- * - Direct TCP via DB_HOST otherwise (local development)
- *
- * @returns {Promise<mysql.Pool>}
+ * Neon serverless pool via WebSockets (suited to long-lived Cloud Run instances).
+ * Requires DATABASE_URL. Optional DB_SCHEMA (default: lorebot).
  */
 async function connectDB() {
   if (pool) {
-    return pool;
+    return db;
   }
 
-  const {
-    DB_USER,
-    DB_PASSWORD,
-    DB_NAME,
-    DB_HOST,
-    CLOUD_SQL_CONNECTION_NAME,
-  } = process.env;
-
-  if (!DB_USER || !DB_NAME) {
-    throw new Error('DB_USER and DB_NAME are required');
+  const connectionString = process.env.DATABASE_URL;
+  if (!connectionString) {
+    throw new Error('DATABASE_URL is required for Neon Postgres');
   }
 
-  // Cloud Run instances are small; keep pool modest to avoid exhausting Cloud SQL connections.
-  const connectionLimit = Number(process.env.DB_CONNECTION_LIMIT || 5);
-
-  const baseConfig = {
-    user: DB_USER,
-    password: DB_PASSWORD,
-    database: DB_NAME,
-    waitForConnections: true,
-    connectionLimit,
-    queueLimit: 0,
-    enableKeepAlive: true,
-    keepAliveInitialDelay: 10000,
-  };
+  const schema = process.env.DB_SCHEMA || 'lorebot';
+  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(schema)) {
+    throw new Error(`Invalid DB_SCHEMA value: ${schema}`);
+  }
+  const max = Number(process.env.DB_CONNECTION_LIMIT || 5);
 
   try {
-    if (CLOUD_SQL_CONNECTION_NAME) {
-      connector = new Connector();
-      const clientOpts = await connector.getOptions({
-        instanceConnectionName: CLOUD_SQL_CONNECTION_NAME,
-        ipType: resolveIpType(),
-      });
+    pool = new Pool({
+      connectionString,
+      max,
+    });
 
-      pool = mysql.createPool({
-        ...clientOpts,
-        ...baseConfig,
-      });
+    // Ensure unqualified table/function names resolve to the lorebot schema.
+    pool.on('connect', (client) => {
+      client.query(`SET search_path TO "${schema}", public`);
+    });
 
-      console.log(
-        `Cloud SQL connector pool ready (${CLOUD_SQL_CONNECTION_NAME}, ${process.env.CLOUD_SQL_IP_TYPE || 'PUBLIC'})`
-      );
-    } else if (DB_HOST) {
-      pool = mysql.createPool({
-        ...baseConfig,
-        host: DB_HOST,
-        port: Number(process.env.DB_PORT || 3306),
-      });
-
-      console.log(`Direct TCP database pool ready (${DB_HOST})`);
-    } else {
-      throw new Error(
-        'Set CLOUD_SQL_CONNECTION_NAME (Cloud SQL connector) or DB_HOST (direct TCP)'
-      );
+    // Warm one connection and set search_path for the first client.
+    const client = await pool.connect();
+    try {
+      await client.query(`SET search_path TO "${schema}", public`);
+      await client.query('SELECT 1');
+    } finally {
+      client.release();
     }
 
-    return pool;
+    db = drizzle(pool);
+    console.log(`Neon Postgres pool ready (schema=${schema}, max=${max})`);
+    return db;
   } catch (error) {
-    console.error('❌ Database connection pool failed:', error);
+    console.error('❌ Neon database connection pool failed:', error);
     throw error;
   }
 }
 
-/**
- * Closes the database connection pool and Cloud SQL connector gracefully.
- */
 async function closeDB() {
   if (pool) {
     try {
       await pool.end();
       pool = null;
-      console.log('Database connection pool closed successfully');
+      db = null;
+      console.log('Neon database pool closed successfully');
     } catch (error) {
-      console.error('Error closing database connection pool:', error);
-    }
-  }
-
-  if (connector) {
-    try {
-      connector.close();
-      connector = null;
-      console.log('Cloud SQL connector closed successfully');
-    } catch (error) {
-      console.error('Error closing Cloud SQL connector:', error);
+      console.error('Error closing Neon database pool:', error);
     }
   }
 }
 
-export { query, connectDB, closeDB };
+export { query, connectDB, closeDB, db };

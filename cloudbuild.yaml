@@ -1,15 +1,11 @@
-# Build and deploy to Cloud Run (uses @google-cloud/cloud-sql-connector in-app).
+# Build and deploy to Cloud Run (Neon serverless Postgres via DATABASE_URL).
 # Prerequisites:
 #   - Artifact Registry repo: cloud-run-source-deploy
-#   - Runtime SA with roles/cloudsql.client
-#   - Cloud SQL Admin API enabled
+#   - Secret Manager secret for DATABASE_URL (recommended)
 #
 # Usage:
 #   gcloud builds submit --config cloudbuild.yaml \
 #     --substitutions=_SERVICE_NAME=lorebot-graphql-api,_REGION=us-east1
-#
-# After first deploy, attach DB secrets/env on the service:
-#   DB_USER, DB_PASSWORD, DB_NAME, CLOUD_SQL_CONNECTION_NAME, CLOUD_SQL_IP_TYPE
 
 substitutions:
   _SERVICE_NAME: lorebot-graphql-api
@@ -45,7 +41,9 @@ steps:
       - --max-instances=10
       - --timeout=300
       - --allow-unauthenticated
-      - --set-env-vars=NODE_ENV=production,HOST=0.0.0.0,CLOUD_SQL_IP_TYPE=PUBLIC
+      - --set-env-vars=NODE_ENV=production,HOST=0.0.0.0,DB_SCHEMA=lorebot
+      # Attach DATABASE_URL from Secret Manager after first deploy, e.g.:
+      # --set-secrets=DATABASE_URL=DATABASE_URL:latest
 
 images:
   - ${_REGION}-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/${_SERVICE_NAME}:$SHORT_SHA

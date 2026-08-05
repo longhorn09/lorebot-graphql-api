@@ -24,6 +24,7 @@ COPY index.js ./
 COPY constants ./constants
 COPY schema ./schema
 COPY services ./services
+COPY db ./db
 
 USER nodejs
 
