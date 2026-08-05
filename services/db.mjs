@@ -54,7 +54,9 @@ function mapRowKeys(row) {
 
   const mapped = {};
   for (const [key, value] of Object.entries(row)) {
-    const mappedKey = key === 'submitter' || /[A-Z]/.test(key) ? key : key.toUpperCase();
+    // Preserve already-cased aliases (e.g. TBL_SRC from GetRecent).
+    // Expose submitter as both cases: Recent.submitter and Person.SUBMITTER.
+    const mappedKey = /[A-Z]/.test(key) ? key : key.toUpperCase();
     let mappedValue = value;
 
     if (
@@ -66,6 +68,10 @@ function mapRowKeys(row) {
     }
 
     mapped[mappedKey] = mappedValue;
+    if (key === 'submitter' || mappedKey === 'SUBMITTER') {
+      mapped.submitter = mappedValue;
+      mapped.SUBMITTER = mappedValue;
+    }
   }
   return mapped;
 }

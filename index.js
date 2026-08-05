@@ -4,12 +4,50 @@
 //require('dotenv').config(); // Load environment variables from .env
 import dotenv from 'dotenv';
 import { ApolloServer } from '@apollo/server';
+import { ApolloServerPluginLandingPageProductionDefault } from '@apollo/server/plugin/landingPage/default';
 import { fastifyApolloHandler } from '@as-integrations/fastify';
 import fastify from 'fastify';
 import cors from '@fastify/cors';
 import { typeDefs, resolvers } from './schema/index.js'; // Import from new modular schema
 import { query, connectDB, closeDB } from './services/db.mjs';
 dotenv.config({ quiet: true });
+
+/**
+ * Dev landing page: redirect to Apollo Studio Sandbox.
+ * The embedded Sandbox iframe often renders blank when the browser blocks
+ * Apollo CDN scripts / third-party frames; Studio is the reliable UI.
+ */
+function apolloStudioLandingPagePlugin(endpointUrl) {
+  const studioUrl = `https://studio.apollographql.com/sandbox/explorer?endpoint=${encodeURIComponent(endpointUrl)}`;
+  const html = `<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Lorebot GraphQL → Apollo Sandbox</title>
+    <meta http-equiv="refresh" content="0; url=${studioUrl}" />
+    <style>
+      body { font-family: system-ui, sans-serif; margin: 2rem; line-height: 1.5; }
+      a { color: #3f20ba; }
+    </style>
+  </head>
+  <body>
+    <h1>Opening Apollo Sandbox…</h1>
+    <p>If you are not redirected, <a href="${studioUrl}">open Apollo Sandbox</a>.</p>
+    <p>GraphQL endpoint: <code>${endpointUrl}</code></p>
+  </body>
+</html>`;
+
+  return {
+    async serverWillStart() {
+      return {
+        async renderLandingPage() {
+          return { html };
+        },
+      };
+    },
+  };
+}
 
 async function startServer() {
   try {
@@ -76,14 +114,24 @@ async function startServer() {
       }
     });
 
+    const port = Number(process.env.PORT || 4000);
+    const host = process.env.HOST || '0.0.0.0';
+    // Studio needs an absolute URL; local browser testing uses localhost.
+    const graphqlEndpoint =
+      process.env.GRAPHQL_PUBLIC_URL || `http://localhost:${port}/graphql`;
+
     // Create a new ApolloServer instance
+    // Note: Apollo Server 4+/5 ignore the old `playground` option; use landing page plugins.
     const server = new ApolloServer({
       typeDefs,
       resolvers,
-      // Environment-based configuration
-      introspection: process.env.NODE_ENV !== 'production', // Enable in development, disable in production
-      playground: process.env.NODE_ENV !== 'production',    // Enable in development, disable in production
-      csrfPrevention: process.env.NODE_ENV === 'production', // Enable in production, disable in development
+      introspection: !isProduction,
+      csrfPrevention: isProduction,
+      plugins: [
+        isProduction
+          ? ApolloServerPluginLandingPageProductionDefault()
+          : apolloStudioLandingPagePlugin(graphqlEndpoint),
+      ],
       formatError: (error) => {
         // Log the error for debugging purposes (optional)
         console.error('GraphQL Error:', error);
@@ -119,7 +167,7 @@ async function startServer() {
     // Register GraphQL route with Fastify
     app.route({
       url: '/graphql',
-      method: ['GET', 'POST'],
+      method: ['GET', 'POST', 'OPTIONS'],
       handler: fastifyApolloHandler(server, {
         context: async (request, reply) => {
           // Log incoming requests for debugging
@@ -164,9 +212,6 @@ async function startServer() {
     });
 
     // Start Fastify server
-    const port = process.env.PORT || 4000;
-    const host = process.env.HOST || '0.0.0.0';
-    
     await app.listen({ port, host });
     console.log(`🚀  Server ready at: http://localhost:${port}/`);
     console.log(`🏥  Health check available at: http://localhost:${port}/health`);
