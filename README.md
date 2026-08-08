@@ -72,22 +72,18 @@ lorebot-graphql-api/
                       │ HTTPS
                       ▼
 ┌─────────────────────────────────────────────────────────────┐
-│         Cloud Run — us-east4 (this service)                 │
-│  • Fastify HTTP server                                      │
-│  • Apollo GraphQL at /graphql                               │
+│  Google Cloud — Cloud Run (us-east4)                        │
+│  • This GraphQL microservice only                           │
+│  • Fastify + Apollo at /graphql                             │
 │  • Liveness /health, readiness /ready                       │
+│  • DB access: @neondatabase/serverless Pool (WebSockets)    │
 └─────────────────────┬───────────────────────────────────────┘
-                      │ GraphQL resolvers
+                      │ DATABASE_URL (pooled TLS)
+                      │ (not Cloud SQL / not GCP-hosted DB)
                       ▼
 ┌─────────────────────────────────────────────────────────────┐
-│              Database access layer                          │
-│  • @neondatabase/serverless Pool (WebSockets)               │
-│  • Parameterized SQL + Postgres functions                   │
-└─────────────────────┬───────────────────────────────────────┘
-                      │ DATABASE_URL (pooled)
-                      ▼
-┌─────────────────────────────────────────────────────────────┐
-│              Neon serverless Postgres                       │
+│  Neon — serverless Postgres (neondb)                        │
+│  • Hosted by Neon (outside GCP)                             │
 │  • Schema: lorebot                                          │
 │  • Tables: lore, person                                     │
 │  • Unique: lore.object_name, person.charname                │
@@ -97,9 +93,9 @@ lorebot-graphql-api/
 
 ### Data flow
 
-1. Client sends a GraphQL operation to `/graphql`
+1. Client sends a GraphQL operation to `/graphql` on Cloud Run
 2. Apollo validates and routes to a resolver
-3. Resolver queries Neon via `services/db.mjs` (`query()`)
+3. Resolver queries **Neon serverless Postgres** (`neondb`) via `services/db.mjs` (`query()`)
 4. Rows are mapped to GraphQL field names and returned
 
 ## Setup
