@@ -113,13 +113,13 @@ const buildWhereClause = (filters) => {
   }
   
   if (filters.ITEM_TYPE) {
-    conditions.push('ITEM_TYPE = ?');
-    params.push(filters.ITEM_TYPE);
+    conditions.push('ITEM_TYPE ILIKE ?');
+    params.push(`%${filters.ITEM_TYPE}%`);
   }
   
   if (filters.CLASS) {
-    conditions.push('CLASS = ?');
-    params.push(filters.CLASS);
+    conditions.push('CLASS ILIKE ?');
+    params.push(`%${filters.CLASS}%`);
   }
   
   if (filters.SUBMITTER) {
@@ -194,6 +194,7 @@ const buildConditionsFromFlexCriteria = (flexCriteria) => {
           break;
           
         // String fields that should use ILIKE with wildcards (MySQL CI collation parity)
+        case "object_name":
         case "item_type":
         case "item_is":
         case "submitter":
@@ -218,27 +219,28 @@ const buildConditionsFromFlexCriteria = (flexCriteria) => {
           //     HEALTH by 5
           
           affectsArr = value.split(",");        // singular or multiple affects
+          // Case-insensitive parse of "… by N" (JS) + case-insensitive SQL match (~*)
+          const affectsByPattern = /^([A-Za-z_\s]+)\s+by\s+([+-]?\d+(?:[A-Za-z_\s\d]+)?)$/i;
           
           for (let i = 0; i < affectsArr.length; i++) {
-            half1 = null, half2 = null, match = null;   
-            if (affectsArr[i].trim().indexOf(' by ') > 0) { 
-              if (/^([A-Za-z_\s]+)\s+by\s+([+-]?\d+(?:[A-Za-z_\s\d]+)?)$/.test( affectsArr[i].trim())) {
-                match = /^([A-Za-z_\s]+)\s+by\s+([+-]?\d+(?:[A-Za-z_\s\d]+)?)$/.exec(affectsArr[i].trim());
-                if (match != null && match.length === 3) {      // think matching index [0,1,2] -> length = 3
-                  half1 = match[1].trim();
-                  var temphalf2 = match[2].trim();
-                  // Optional '+' before the number; Postgres ~* is case-insensitive (MySQL CI parity)
-                  half2 = temphalf2.replace(/\+/g, '\\+?'); 
-                  
-                  conditions.push(`${fieldName.toUpperCase()} ~* ?`);
-                  // Substring match across comma-separated affects list
-                  params.push(`${half1}\\s+by\\s+${half2}`);
-                }
-              } // end of regex test
+            half1 = null, half2 = null, match = null;
+            const affectTrimmed = affectsArr[i].trim();
+            if (/\sby\s/i.test(affectTrimmed)) {
+              match = affectsByPattern.exec(affectTrimmed);
+              if (match != null && match.length === 3) {      // think matching index [0,1,2] -> length = 3
+                half1 = match[1].trim();
+                var temphalf2 = match[2].trim();
+                // Optional '+' before the number; Postgres ~* is case-insensitive (MySQL CI parity)
+                half2 = temphalf2.replace(/\+/g, '\\+?');
+
+                conditions.push(`${fieldName.toUpperCase()} ~* ?`);
+                // Substring match; ~* is case-insensitive (MySQL CI parity)
+                params.push(`${half1}\\s+by\\s+${half2}`);
+              }
             } // end of testing for ' by '
             else {      // ie. /query affects=skill shield block           <=== no ' by '
               conditions.push(`${fieldName.toUpperCase()} ILIKE ?`);
-              params.push(`%${affectsArr[i].trim()}%`);
+              params.push(`%${affectTrimmed}%`);
             }
           }
           break;
@@ -568,7 +570,7 @@ export const loreResolvers = {
         );
 
         const rows = await query(
-          `SELECT LORE_ID FROM Lore WHERE OBJECT_NAME = ? LIMIT 1`,
+          `SELECT LORE_ID FROM Lore WHERE LOWER(OBJECT_NAME) = LOWER(?) LIMIT 1`,
           [OBJECT_NAME]
         );
         

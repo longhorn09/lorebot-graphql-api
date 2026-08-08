@@ -20,7 +20,7 @@ export const lore = lorebot.table('lore', {
   affects: varchar('affects', { length: 600 }),
   apply: bigint('apply', { mode: 'number' }),
   restricts: varchar('restricts', { length: 200 }),
-  create_date: timestamp('create_date', { withTimezone: true }),
+  create_date: timestamp('create_date', { withTimezone: true }).defaultNow(),
   class: varchar('class', { length: 20 }),
   mat_class: varchar('mat_class', { length: 30 }),
   material: varchar('material', { length: 40 }),

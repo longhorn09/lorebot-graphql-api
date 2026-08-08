@@ -13,7 +13,7 @@ CREATE TABLE IF NOT EXISTS lorebot.lore (
   affects varchar(600),
   apply bigint,
   restricts varchar(200),
-  create_date timestamptz,
+  create_date timestamptz DEFAULT now(),
   class varchar(20),
   mat_class varchar(30),
   material varchar(40),
@@ -33,7 +33,8 @@ CREATE TABLE IF NOT EXISTS lorebot.lore (
   can_use varchar(200)
 );
 
--- Required for CreateLore / CreateLore_v002 ON CONFLICT ("object_name")
+-- Required for CreateLore_v002 ON CONFLICT ("object_name").
+-- Present on live Neon (lorebot-prd) as of 2026-08-08.
 CREATE UNIQUE INDEX IF NOT EXISTS lore_object_name_uidx
   ON lorebot.lore (object_name);
 
@@ -68,6 +69,7 @@ CREATE TABLE IF NOT EXISTS lorebot.person (
   on_chest varchar(60)
 );
 
--- Required for CreatePerson_v002 ON CONFLICT ("charname")
+-- Required for CreatePerson_v002 ON CONFLICT ("charname").
+-- Present on live Neon (lorebot-prd) as of 2026-08-08.
 CREATE UNIQUE INDEX IF NOT EXISTS person_charname_uidx
   ON lorebot.person (charname);

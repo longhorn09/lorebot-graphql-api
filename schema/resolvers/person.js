@@ -35,14 +35,13 @@ const buildWhereClause = (filters) => {
   const params = [];
   
   if (filters.CHARNAME) {
-    //conditions.push('CHARNAME LIKE ?');
-    //params.push(`%${filters.CHARNAME}%`);
-    conditions.push('CHARNAME = ?');
+    // Exact match, case-insensitive (MySQL CI collation parity)
+    conditions.push('LOWER(CHARNAME) = LOWER(?)');
     params.push(filters.CHARNAME);
   }
   
   if (filters.SUBMITTER) {
-    conditions.push('SUBMITTER = ?');
+    conditions.push('LOWER(SUBMITTER) = LOWER(?)');
     params.push(filters.SUBMITTER);
   }
   
@@ -202,11 +201,14 @@ export const personResolvers = {
         console.log('===========================');
         */
         
+        // Store CHARNAME in Proper case (e.g. nooka → Nooka); lookups stay case-insensitive
+        const charname = proper(input.CHARNAME);
+
         // Neon Postgres function (ported from MySQL CreatePerson_v002); returns void
         await query(
           `SELECT "CreatePerson_v002"(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [
-            input.CHARNAME ?? null,
+            charname,
             input.LIGHT ?? null,
             input.RING1 ?? null,
             input.RING2 ?? null,
@@ -236,12 +238,12 @@ export const personResolvers = {
         );
 
         const rows = await query(
-          `SELECT PERSON_ID FROM Person WHERE CHARNAME = ? LIMIT 1`,
-          [input.CHARNAME]
+          `SELECT PERSON_ID FROM Person WHERE LOWER(CHARNAME) = LOWER(?) LIMIT 1`,
+          [charname]
         );
-        console.log(`${moment().format(MYSQL_DATETIME_FORMAT)} : ${input.SUBMITTER.padEnd(30)} /who ${input.CHARNAME}`);
+        console.log(`${moment().format(MYSQL_DATETIME_FORMAT)} : ${(input.SUBMITTER ?? '').toString().padEnd(30)} /who ${charname}`);
         
-        return { ...input, PERSON_ID: rows[0]?.PERSON_ID ?? null };
+        return { ...input, CHARNAME: charname, PERSON_ID: rows[0]?.PERSON_ID ?? null };
         
       } catch (error) {
         console.error('Error in addOrUpdatePerson:', error);

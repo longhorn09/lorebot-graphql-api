@@ -1,4 +1,5 @@
 -- Postgres port of mysql/CreateLore_v002.sql (Neon-compatible).
+-- Upsert requires unique index lore_object_name_uidx (present on live Neon as of 2026-08-08).
 -- See DIFFS.md for differences vs live Neon.
 
 CREATE OR REPLACE FUNCTION lorebot."CreateLore_v002"(
