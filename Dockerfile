@@ -1,5 +1,5 @@
 # Build a lean production image for Cloud Run
-FROM node:22-slim AS deps
+FROM node:lts-slim AS deps
 
 WORKDIR /app
 
